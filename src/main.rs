@@ -1,5 +1,3 @@
-use std::{borrow::Cow, sync::Arc};
-
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -9,73 +7,8 @@ use winit::{
     window::{Window, WindowId},
 };
 
-struct State {
-    window: Arc<Window>,
-    surface: wgpu::Surface<'static>,
-    surface_config: wgpu::SurfaceConfiguration,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    render_pipeline: wgpu::RenderPipeline,
-}
-
-impl State {
-    fn new(window: Window) -> Self {
-        let window = Arc::new(window);
-        let window_size = window.inner_size();
-        let instance =
-            wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
-        let (adapter, device, queue) =
-            pollster::block_on(request_adapter(&instance));
-
-        let surface = instance.create_surface(window.clone()).unwrap();
-        let surface_config = surface
-            .get_default_config(&adapter, window_size.width, window_size.height)
-            .unwrap();
-        surface.configure(&device, &surface_config);
-
-        let shader =
-            device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                    "shader.wgsl"
-                ))),
-            });
-        let render_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: None,
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: None,
-                    compilation_options: Default::default(),
-                    buffers: &[],
-                },
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: None,
-                    compilation_options:
-                        wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(surface_config.format.into())],
-                }),
-                multiview: None,
-                cache: None,
-            });
-
-        println!("{device:#?}");
-
-        Self {
-            window,
-            surface,
-            surface_config,
-            device,
-            queue,
-            render_pipeline,
-        }
-    }
-}
+mod graphics;
+use graphics::State;
 
 #[derive(Default)]
 struct App {
@@ -88,67 +21,15 @@ impl App {
     }
 
     fn render(&mut self) {
-        let state = self.state.as_ref().unwrap();
-        let frame = state.surface.get_current_texture().unwrap();
-        let view = &frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder =
-            state.device.create_command_encoder(&Default::default());
-
-        let render_pass_descriptor = wgpu::RenderPassDescriptor {
-            label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        };
-
-        // GPU work goes here
-        {
-            let mut render_pass =
-                encoder.begin_render_pass(&render_pass_descriptor);
-            render_pass.set_pipeline(&state.render_pipeline);
-            render_pass.draw(0..3, 0..1);
-        }
-
-        state.queue.submit([encoder.finish()]);
-        state.window.pre_present_notify();
-        frame.present();
+        self.state.as_mut().unwrap().render();
     }
 
     fn resize(&mut self, size: PhysicalSize<u32>) {
         if size.width * size.height == 0 {
             return;
         }
-        let state = self.state.as_mut().unwrap();
-
-        let surface_config = &mut state.surface_config;
-        surface_config.height = size.height;
-        surface_config.width = size.width;
-        state.surface.configure(&state.device, &surface_config);
+        self.state.as_mut().unwrap().resize(size);
     }
-}
-async fn request_adapter(
-    instance: &wgpu::Instance,
-) -> (wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions::default())
-        .await
-        .unwrap();
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor::default(), None)
-        .await
-        .unwrap();
-    (adapter, device, queue)
 }
 
 impl ApplicationHandler for App {
