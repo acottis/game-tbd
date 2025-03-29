@@ -1,0 +1,9 @@
+[package]
+name = "unknown-game"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pollster = { version = "0.4.0", default-features = false }
+wgpu = { version = "24.0.3", default-features = false }
+winit = { version = "0.30.9", default-features = false, features = ["rwh_06"] }
