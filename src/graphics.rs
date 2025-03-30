@@ -5,7 +5,9 @@ use wgpu::{
     InstanceDescriptor, MultisampleState, PolygonMode, PrimitiveState,
     PrimitiveTopology, Queue, RenderPipeline, RenderPipelineDescriptor,
     RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, Surface,
-    SurfaceConfiguration, VertexState,
+    SurfaceConfiguration, VertexAttribute, VertexBufferLayout, VertexFormat,
+    VertexState, VertexStepMode,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -40,6 +42,7 @@ impl State {
                 "shader.wgsl"
             ))),
         });
+
         let render_pipeline =
             device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
@@ -48,7 +51,22 @@ impl State {
                     module: &shader,
                     entry_point: None,
                     compilation_options: Default::default(),
-                    buffers: &[],
+                    buffers: &[VertexBufferLayout {
+                        array_stride: size_of::<Vertex2D>() as u64,
+                        step_mode: VertexStepMode::Vertex,
+                        attributes: &[
+                            VertexAttribute {
+                                format: VertexFormat::Float32x2,
+                                offset: 0,
+                                shader_location: 0,
+                            },
+                            VertexAttribute {
+                                format: VertexFormat::Float32x2,
+                                offset: 2 * 4, // Size of previous attribute
+                                shader_location: 1,
+                            },
+                        ],
+                    }],
                 },
                 primitive: PrimitiveState {
                     topology: PrimitiveTopology::TriangleStrip,
@@ -98,7 +116,7 @@ impl State {
         let mut encoder =
             self.device.create_command_encoder(&Default::default());
 
-        let render_pass_descriptor = wgpu::RenderPassDescriptor {
+        let render_pass_desc = wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
@@ -113,12 +131,30 @@ impl State {
             occlusion_query_set: None,
         };
 
+        let vertices = [
+            Vertex2D::new(0.0, 0.6),
+            Vertex2D::new(-0.5, 0.1),
+            Vertex2D::new(0.5, 0.1),
+            Vertex2D::new(0.0, -0.6),
+            Vertex2D::new(-0.5, -0.1),
+            Vertex2D::new(0.5, -0.1),
+        ];
+
+        let vertex_buf =
+            self.device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                usage: wgpu::BufferUsages::VERTEX,
+                contents: bytemuck::cast_slice(&vertices),
+            });
+
         // GPU work goes here
         {
-            let mut render_pass =
-                encoder.begin_render_pass(&render_pass_descriptor);
+            let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
             render_pass.set_pipeline(&self.render_pipeline);
+
+            render_pass.set_vertex_buffer(0, vertex_buf.slice(..));
             render_pass.draw(0..3, 0..1);
+            render_pass.draw(3..6, 0..1);
         }
 
         self.queue.submit([encoder.finish()]);
@@ -134,7 +170,7 @@ async fn init_wgpu(
     let adapter = instance
         .request_adapter(&RequestAdapterOptions {
             power_preference: Default::default(),
-            force_fallback_adapter: false,
+            force_fallback_adapter: Default::default(),
             compatible_surface: Some(surface),
         })
         .await
@@ -144,4 +180,21 @@ async fn init_wgpu(
         .await
         .unwrap();
     (adapter, device, queue)
+}
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
+#[repr(C)]
+struct Vertex2D {
+    x: f32,
+    y: f32,
+    texture: [f32; 2],
+}
+impl Vertex2D {
+    fn new(x: f32, y: f32) -> Self {
+        Self {
+            x,
+            y,
+            texture: [0., 0.],
+        }
+    }
 }
