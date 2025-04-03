@@ -1,13 +1,9 @@
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use wgpu::{
-    Device, DeviceDescriptor, FragmentState, FrontFace, Instance,
-    InstanceDescriptor, MultisampleState, PolygonMode, PrimitiveState,
-    PrimitiveTopology, Queue, RenderPipeline, RenderPipelineDescriptor,
-    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, Surface,
-    SurfaceConfiguration, VertexAttribute, VertexBufferLayout, VertexFormat,
-    VertexState, VertexStepMode,
+    AddressMode, BufferUsages, FilterMode, SamplerDescriptor, include_wgsl,
     util::{BufferInitDescriptor, DeviceExt},
+    *,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -18,6 +14,8 @@ pub struct State {
     device: Device,
     queue: Queue,
     render_pipeline: RenderPipeline,
+    texture_bind_group: BindGroup,
+    camera_bind_group: BindGroup,
 }
 
 impl State {
@@ -36,17 +34,136 @@ impl State {
             .unwrap();
         surface.configure(&device, &surface_config);
 
-        let shader = device.create_shader_module(ShaderModuleDescriptor {
+        // Camera stuff
+        let mut camera = Camera::identity();
+        camera.translate_x(0.0);
+        camera.translate_y(0.2);
+
+        let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(Cow::Borrowed(include_str!(
-                "shader.wgsl"
-            ))),
+            contents: bytemuck::bytes_of(&camera),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
+
+        // Image stuff
+        let image =
+            image::load_from_memory(include_bytes!("../ahsoka.jpg")).unwrap();
+
+        let size = Extent3d {
+            width: image.width(),
+            height: image.height(),
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            texture.as_image_copy(),
+            &image.to_rgba8(),
+            TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(image.width() * 4),
+                rows_per_image: Some(image.height()),
+            },
+            size,
+        );
+        // Sampler
+        let texture_view = texture.create_view(&Default::default());
+        let sampler = device.create_sampler(&SamplerDescriptor {
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Nearest,
+            mipmap_filter: FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let camera_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Camera Bind Group Layout"),
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    visibility: ShaderStages::VERTEX,
+                    count: None,
+                }],
+            });
+        let camera_bind_group =
+            device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Camera Bind Group"),
+                layout: &camera_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }],
+            });
+        let texture_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Texture Bind Group Layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float {
+                                filterable: true,
+                            },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let texture_bind_group =
+            device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Texture Bind Group"),
+                layout: &texture_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
+        let pipeline_layout =
+            device.create_pipeline_layout(&PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&camera_layout, &texture_layout],
+                push_constant_ranges: &[],
+            });
+
+        // End Texture Stuff
+
+        let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
 
         let render_pipeline =
             device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: None,
-                layout: None,
+                layout: Some(&pipeline_layout),
                 vertex: VertexState {
                     module: &shader,
                     entry_point: None,
@@ -62,14 +179,20 @@ impl State {
                             },
                             VertexAttribute {
                                 format: VertexFormat::Float32x2,
-                                offset: 2 * 4, // Size of previous attribute
+                                offset: (size_of::<f32>() * 2) as u64,
                                 shader_location: 1,
                             },
                         ],
                     }],
                 },
+                fragment: Some(FragmentState {
+                    module: &shader,
+                    entry_point: None,
+                    compilation_options: Default::default(),
+                    targets: &[Some(surface_config.format.into())],
+                }),
                 primitive: PrimitiveState {
-                    topology: PrimitiveTopology::TriangleStrip,
+                    topology: PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: FrontFace::Ccw,
                     cull_mode: None,
@@ -79,12 +202,6 @@ impl State {
                 },
                 depth_stencil: None,
                 multisample: MultisampleState::default(),
-                fragment: Some(FragmentState {
-                    module: &shader,
-                    entry_point: None,
-                    compilation_options: Default::default(),
-                    targets: &[Some(surface_config.format.into())],
-                }),
                 multiview: None,
                 cache: None,
             });
@@ -98,6 +215,8 @@ impl State {
             device,
             queue,
             render_pipeline,
+            texture_bind_group,
+            camera_bind_group,
         }
     }
 
@@ -109,21 +228,20 @@ impl State {
 
     pub fn render(&mut self) {
         let frame = self.surface.get_current_texture().unwrap();
-        let view = &frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view =
+            &frame.texture.create_view(&TextureViewDescriptor::default());
 
         let mut encoder =
             self.device.create_command_encoder(&Default::default());
 
-        let render_pass_desc = wgpu::RenderPassDescriptor {
+        let render_pass_desc = RenderPassDescriptor {
             label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(RenderPassColorAttachment {
                 view,
                 resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-                    store: wgpu::StoreOp::Store,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::WHITE),
+                    store: StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
@@ -131,19 +249,28 @@ impl State {
             occlusion_query_set: None,
         };
 
+        //        let vertices = [
+        //            Vertex2D::new(0.0, 0.6, [0., 0.]),
+        //            Vertex2D::new(-0.5, 0.1, [0.0, 0.0]),
+        //            Vertex2D::new(0.5, 0.1, [0.0, 0.0]),
+        //            // Two
+        //            Vertex2D::new(0.0, -0.6, [0.0, 0.]),
+        //            Vertex2D::new(-0.5, -0.1, [0.0, 0.0]),
+        //            Vertex2D::new(0.5, -0.1, [0.0, 0.]),
+        //        ];
         let vertices = [
-            Vertex2D::new(0.0, 0.6),
-            Vertex2D::new(-0.5, 0.1),
-            Vertex2D::new(0.5, 0.1),
-            Vertex2D::new(0.0, -0.6),
-            Vertex2D::new(-0.5, -0.1),
-            Vertex2D::new(0.5, -0.1),
+            //            Vertex2D::new(0.0, 0.0, [0.5, 1.0]),
+            //            Vertex2D::new(0.0, 1.0, [0.0, 0.0]),
+            //            Vertex2D::new(1.0, 0.0, [1.0, 0.0]),
+            Vertex2D::new(1.0, 1.0, [0.0, 0.0]),
+            Vertex2D::new(-1.0, -1.0, [1.0, 1.0]),
+            Vertex2D::new(1.0, -1.0, [0.0, 1.0]),
         ];
 
         let vertex_buf =
             self.device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: BufferUsages::VERTEX,
                 contents: bytemuck::cast_slice(&vertices),
             });
 
@@ -152,9 +279,11 @@ impl State {
             let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
             render_pass.set_pipeline(&self.render_pipeline);
 
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buf.slice(..));
             render_pass.draw(0..3, 0..1);
-            render_pass.draw(3..6, 0..1);
+            //render_pass.draw(3..6, 0..1);
         }
 
         self.queue.submit([encoder.finish()]);
@@ -166,7 +295,7 @@ impl State {
 async fn init_wgpu(
     instance: &Instance,
     surface: &Surface<'static>,
-) -> (wgpu::Adapter, Device, Queue) {
+) -> (Adapter, Device, Queue) {
     let adapter = instance
         .request_adapter(&RequestAdapterOptions {
             power_preference: Default::default(),
@@ -187,14 +316,40 @@ async fn init_wgpu(
 struct Vertex2D {
     x: f32,
     y: f32,
-    texture: [f32; 2],
+    tex_coords: [f32; 2],
 }
 impl Vertex2D {
-    fn new(x: f32, y: f32) -> Self {
+    fn new(x: f32, y: f32, tex_coords: [f32; 2]) -> Self {
+        Self { x, y, tex_coords }
+    }
+}
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
+#[repr(C)]
+struct Camera {
+    inner: [f32; 16],
+}
+impl Camera {
+    fn identity() -> Self {
         Self {
-            x,
-            y,
-            texture: [0., 0.],
+            inner: [
+                1.0, 0.0, 0.0, 0.0, //
+                0.0, 1.0, 0.0, 0.0, //
+                0.0, 0.0, 1.0, 0.0, //
+                0.0, 0.0, 0.0, 1.0,
+            ],
         }
     }
+    fn translate_x(&mut self, x: f32) {
+        const INDEX: usize = get_index(3, 0);
+        self.inner[INDEX] += x;
+    }
+    fn translate_y(&mut self, y: f32) {
+        const INDEX: usize = get_index(3, 1);
+        self.inner[INDEX] += y;
+    }
+}
+const fn get_index(row: usize, col: usize) -> usize {
+    const ROW_LEN: usize = 4;
+    row * ROW_LEN + col
 }
