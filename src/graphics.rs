@@ -36,12 +36,6 @@ impl State {
 
         // Camera stuff
         let camera = Camera::new();
-        //        let view = [
-        //            1.0_f32, 0.0, 0.0, 0.0, //
-        //            0.0, 1.0, 0.0, 0.0, //
-        //            0.0, 0.0, 1.0, 0.0, //
-        //            0.0, 0.0, 0.0, 1.0,
-        //        ];
         let view = camera.look_at_rh();
         println!("{view:?}");
 
@@ -53,7 +47,8 @@ impl State {
 
         // Image stuff
         let image =
-            image::load_from_memory(include_bytes!("../ahsoka.jpg")).unwrap();
+            image::load_from_memory(include_bytes!("../assets/ahsoka.jpg"))
+                .unwrap();
 
         let size = Extent3d {
             width: image.width(),
@@ -164,7 +159,8 @@ impl State {
 
         // End Texture Stuff
 
-        let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
+        let shader = device
+            .create_shader_module(include_wgsl!("../shaders/shader.wgsl"));
 
         let render_pipeline =
             device.create_render_pipeline(&RenderPipelineDescriptor {
