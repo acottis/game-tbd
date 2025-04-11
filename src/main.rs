@@ -8,6 +8,7 @@ use winit::{
 };
 
 mod graphics;
+mod math;
 use graphics::State;
 
 #[derive(Default)]

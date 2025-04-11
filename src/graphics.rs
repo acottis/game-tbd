@@ -7,6 +7,8 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::math::{Mat4, Vec3, Vec4};
+
 pub struct State {
     window: Arc<Window>,
     surface: Surface<'static>,
@@ -325,123 +327,6 @@ impl Vertex2D {
         Self { x, y, tex_coords }
     }
 }
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
-#[repr(C)]
-struct Mat4 {
-    x: Vec4,
-    y: Vec4,
-    z: Vec4,
-    w: Vec4,
-}
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Default, Debug)]
-#[repr(C)]
-struct Vec4 {
-    x: f32,
-    y: f32,
-    z: f32,
-    w: f32,
-}
-
-impl Vec4 {
-    fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
-        Self { x, y, z, w }
-    }
-    fn from_vec3(vec3: Vec3, w: f32) -> Self {
-        Self {
-            x: vec3.x,
-            y: vec3.y,
-            z: vec3.z,
-            w,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Default)]
-struct Vec3 {
-    x: f32,
-    y: f32,
-    z: f32,
-}
-
-impl Vec3 {
-    fn new(x: f32, y: f32, z: f32) -> Self {
-        Self { x, y, z }
-    }
-    fn dot(&self, rhs: &Self) -> f32 {
-        (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z)
-    }
-    fn cross(&self, rhs: &Self) -> Self {
-        Vec3::new(
-            (self.y * rhs.z) - (self.z * rhs.y),
-            (self.z * rhs.x) - (self.x * rhs.z),
-            (self.x * rhs.y) - (self.y * rhs.x),
-        )
-    }
-    fn normalise(&self) -> Self {
-        let len = (self.dot(self)).sqrt();
-        self / len
-    }
-}
-
-impl core::ops::Div<f32> for &Vec3 {
-    type Output = Vec3;
-
-    fn div(self, rhs: f32) -> Self::Output {
-        if rhs == 0.0 {
-            return Vec3::default();
-        }
-        Vec3 {
-            x: self.x / rhs,
-            y: self.y / rhs,
-            z: self.z / rhs,
-        }
-    }
-}
-impl core::ops::Add for Vec3 {
-    type Output = Self;
-
-    fn add(mut self, rhs: Self) -> Self::Output {
-        self.x += rhs.x;
-        self.y += rhs.y;
-        self.z += rhs.z;
-        self
-    }
-}
-impl core::ops::Sub for Vec3 {
-    type Output = Vec3;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-            z: self.z - rhs.z,
-        }
-    }
-}
-impl core::ops::Sub for &Vec3 {
-    type Output = Vec3;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Vec3 {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-            z: self.z - rhs.z,
-        }
-    }
-}
-impl core::ops::Mul for Vec3 {
-    type Output = Self;
-
-    fn mul(mut self, rhs: Self) -> Self::Output {
-        self.x *= rhs.x;
-        self.y *= rhs.y;
-        self.z *= rhs.z;
-        self
-    }
-}
-
 struct Camera {
     position: Vec3,
     target: Vec3,
