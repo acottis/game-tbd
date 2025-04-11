@@ -37,7 +37,7 @@ impl State {
         surface.configure(&device, &surface_config);
 
         // Camera stuff
-        let camera = Camera::new();
+        let camera = Camera::identity();
         let view = camera.look_at_rh();
         println!("{view:?}");
 
@@ -334,10 +334,10 @@ struct Camera {
 }
 
 impl Camera {
-    fn new() -> Self {
+    fn identity() -> Self {
         Self {
             position: Vec3::new(0.0, 0.0, 0.0),
-            target: Vec3::new(0.0, 0.0, 5.0),
+            target: Vec3::new(0.0, 0.0, -1.0),
             up: Vec3::new(0.0, 1.0, 0.0),
         }
     }

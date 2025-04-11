@@ -53,6 +53,9 @@ impl Vec3 {
     }
     pub fn normalise(&self) -> Self {
         let len = (self.dot(self)).sqrt();
+        if len == 0.0 {
+            return Vec3::default();
+        }
         self / len
     }
 }
@@ -61,9 +64,6 @@ impl core::ops::Div<f32> for &Vec3 {
     type Output = Vec3;
 
     fn div(self, rhs: f32) -> Self::Output {
-        if rhs == 0.0 {
-            return Vec3::default();
-        }
         Vec3 {
             x: self.x / rhs,
             y: self.y / rhs,
