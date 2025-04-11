@@ -35,13 +35,19 @@ impl State {
         surface.configure(&device, &surface_config);
 
         // Camera stuff
-        let mut camera = Camera::identity();
-        camera.translate_x(0.0);
-        camera.translate_y(0.2);
+        let camera = Camera::new();
+        //        let view = [
+        //            1.0_f32, 0.0, 0.0, 0.0, //
+        //            0.0, 1.0, 0.0, 0.0, //
+        //            0.0, 0.0, 1.0, 0.0, //
+        //            0.0, 0.0, 0.0, 1.0,
+        //        ];
+        let view = camera.look_at_rh();
+        println!("{view:?}");
 
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: bytemuck::bytes_of(&camera),
+            contents: bytemuck::bytes_of(&view),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
@@ -305,7 +311,7 @@ async fn init_wgpu(
         .await
         .unwrap();
     let (device, queue) = adapter
-        .request_device(&DeviceDescriptor::default(), None)
+        .request_device(&DeviceDescriptor::default())
         .await
         .unwrap();
     (adapter, device, queue)
@@ -324,32 +330,150 @@ impl Vertex2D {
     }
 }
 
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
 #[repr(C)]
-struct Camera {
-    inner: [f32; 16],
+struct Mat4 {
+    x: Vec4,
+    y: Vec4,
+    z: Vec4,
+    w: Vec4,
 }
-impl Camera {
-    fn identity() -> Self {
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Default, Debug)]
+#[repr(C)]
+struct Vec4 {
+    x: f32,
+    y: f32,
+    z: f32,
+    w: f32,
+}
+
+impl Vec4 {
+    fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+    fn from_vec3(vec3: Vec3, w: f32) -> Self {
         Self {
-            inner: [
-                1.0, 0.0, 0.0, 0.0, //
-                0.0, 1.0, 0.0, 0.0, //
-                0.0, 0.0, 1.0, 0.0, //
-                0.0, 0.0, 0.0, 1.0,
-            ],
+            x: vec3.x,
+            y: vec3.y,
+            z: vec3.z,
+            w,
         }
     }
-    fn translate_x(&mut self, x: f32) {
-        const INDEX: usize = get_index(3, 0);
-        self.inner[INDEX] += x;
+}
+
+#[derive(Clone, Copy, Default)]
+struct Vec3 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+impl Vec3 {
+    fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
-    fn translate_y(&mut self, y: f32) {
-        const INDEX: usize = get_index(3, 1);
-        self.inner[INDEX] += y;
+    fn dot(&self, rhs: &Self) -> f32 {
+        (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z)
+    }
+    fn cross(&self, rhs: &Self) -> Self {
+        Vec3::new(
+            (self.y * rhs.z) - (self.z * rhs.y),
+            (self.z * rhs.x) - (self.x * rhs.z),
+            (self.x * rhs.y) - (self.y * rhs.x),
+        )
+    }
+    fn normalise(&self) -> Self {
+        let len = (self.dot(self)).sqrt();
+        self / len
     }
 }
-const fn get_index(row: usize, col: usize) -> usize {
-    const ROW_LEN: usize = 4;
-    row * ROW_LEN + col
+
+impl core::ops::Div<f32> for &Vec3 {
+    type Output = Vec3;
+
+    fn div(self, rhs: f32) -> Self::Output {
+        if rhs == 0.0 {
+            return Vec3::default();
+        }
+        Vec3 {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            z: self.z / rhs,
+        }
+    }
+}
+impl core::ops::Add for Vec3 {
+    type Output = Self;
+
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+        self
+    }
+}
+impl core::ops::Sub for Vec3 {
+    type Output = Vec3;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+impl core::ops::Sub for &Vec3 {
+    type Output = Vec3;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec3 {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+impl core::ops::Mul for Vec3 {
+    type Output = Self;
+
+    fn mul(mut self, rhs: Self) -> Self::Output {
+        self.x *= rhs.x;
+        self.y *= rhs.y;
+        self.z *= rhs.z;
+        self
+    }
+}
+
+struct Camera {
+    position: Vec3,
+    target: Vec3,
+    up: Vec3,
+}
+
+impl Camera {
+    fn new() -> Self {
+        Self {
+            position: Vec3::new(0.0, 0.0, 0.0),
+            target: Vec3::new(0.0, 0.0, 5.0),
+            up: Vec3::new(0.0, 1.0, 0.0),
+        }
+    }
+    fn look_at_rh(&self) -> Mat4 {
+        let forward = (self.target - self.position).normalise();
+        let right = forward.cross(&self.up).normalise();
+        let up = right.cross(&forward).normalise();
+
+        let projection_x = -right.dot(&self.position);
+        let projection_y = -up.dot(&self.position);
+        let projection_z = forward.dot(&self.position);
+
+        Mat4 {
+            x: Vec4::new(right.x, up.x, -forward.x, 0.0),
+            y: Vec4::new(right.y, up.y, -forward.y, 0.0),
+            z: Vec4::new(right.z, up.z, -forward.z, 0.0),
+            w: Vec4::new(projection_x, projection_y, projection_z, 1.0),
+        }
+    }
 }

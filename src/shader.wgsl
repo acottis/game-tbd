@@ -1,5 +1,5 @@
 struct Camera {
-	projection_matrix: mat4x4<f32>,
+	view_matrix: mat4x4<f32>,
 }
 
 struct VertexInput {
@@ -24,7 +24,7 @@ var s_diffuse: sampler;
 @vertex
 fn vs_main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.position = camera.projection_matrix * vec4<f32>(model.vertex, 0.0, 1.0);
+    out.position = camera.view_matrix * vec4<f32>(model.vertex, 0.0, 1.0);
     out.uv = model.uv;
     return out;
 }
