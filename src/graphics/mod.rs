@@ -1,13 +1,16 @@
-use std::sync::Arc;
+use std::{f32::consts::PI, sync::Arc};
 
 use wgpu::{
-    AddressMode, BufferUsages, FilterMode, SamplerDescriptor, include_wgsl,
+    AddressMode, BufferUsages, FilterMode, IndexFormat, SamplerDescriptor,
+    include_wgsl,
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::math::{Mat4, Vec3, Vec4};
+
+mod models;
 
 pub struct State {
     window: Arc<Window>,
@@ -20,6 +23,9 @@ pub struct State {
     pub camera: Camera,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
+    // TODO
+    vertex_buffer: Buffer,
+    index_buffer: Buffer,
 }
 
 impl State {
@@ -40,19 +46,29 @@ impl State {
 
         // Camera stuff
         let camera = Camera::identity();
-        let view = camera.look_at_rh();
-        println!("{view:?}");
 
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: bytemuck::bytes_of(&view),
+            contents: bytemuck::bytes_of(&camera.view_perspective_rh()),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
+        // Model stuff
+        let mut model = models::load_glb("assets/cube.glb");
+
+        let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            usage: BufferUsages::INDEX,
+            contents: bytemuck::cast_slice(&model.indices),
+        });
+        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            usage: BufferUsages::VERTEX,
+            contents: bytemuck::cast_slice(&model.vertices),
+        });
+
         // Image stuff
-        let image =
-            image::load_from_memory(include_bytes!("../assets/ahsoka.jpg"))
-                .unwrap();
+        let image = model.images.first().unwrap().to_rgba8();
 
         let size = Extent3d {
             width: image.width(),
@@ -71,7 +87,7 @@ impl State {
         });
         queue.write_texture(
             texture.as_image_copy(),
-            &image.to_rgba8(),
+            &image,
             TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(image.width() * 4),
@@ -87,7 +103,7 @@ impl State {
             address_mode_w: AddressMode::ClampToEdge,
             mag_filter: FilterMode::Linear,
             min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Nearest,
+            mipmap_filter: FilterMode::Linear,
             ..Default::default()
         });
 
@@ -164,7 +180,7 @@ impl State {
         // End Texture Stuff
 
         let shader = device
-            .create_shader_module(include_wgsl!("../shaders/shader.wgsl"));
+            .create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
 
         let render_pipeline =
             device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -174,22 +190,7 @@ impl State {
                     module: &shader,
                     entry_point: None,
                     compilation_options: Default::default(),
-                    buffers: &[VertexBufferLayout {
-                        array_stride: size_of::<Vertex2D>() as u64,
-                        step_mode: VertexStepMode::Vertex,
-                        attributes: &[
-                            VertexAttribute {
-                                format: VertexFormat::Float32x2,
-                                offset: 0,
-                                shader_location: 0,
-                            },
-                            VertexAttribute {
-                                format: VertexFormat::Float32x2,
-                                offset: (size_of::<f32>() * 2) as u64,
-                                shader_location: 1,
-                            },
-                        ],
-                    }],
+                    buffers: &[Vertex3D::layout()],
                 },
                 fragment: Some(FragmentState {
                     module: &shader,
@@ -225,6 +226,8 @@ impl State {
             camera,
             camera_bind_group,
             camera_buffer,
+            vertex_buffer,
+            index_buffer,
         }
     }
 
@@ -256,36 +259,10 @@ impl State {
             timestamp_writes: None,
             occlusion_query_set: None,
         };
-
-        //        let vertices = [
-        //            Vertex2D::new(0.0, 0.6, [0., 0.]),
-        //            Vertex2D::new(-0.5, 0.1, [0.0, 0.0]),
-        //            Vertex2D::new(0.5, 0.1, [0.0, 0.0]),
-        //            // Two
-        //            Vertex2D::new(0.0, -0.6, [0.0, 0.]),
-        //            Vertex2D::new(-0.5, -0.1, [0.0, 0.0]),
-        //            Vertex2D::new(0.5, -0.1, [0.0, 0.]),
-        //        ];
-        let vertices = [
-            //            Vertex2D::new(0.0, 0.0, [0.5, 1.0]),
-            //            Vertex2D::new(0.0, 1.0, [0.0, 0.0]),
-            //            Vertex2D::new(1.0, 0.0, [1.0, 0.0]),
-            Vertex2D::new(1.0, 1.0, [0.0, 0.0]),
-            Vertex2D::new(-1.0, -1.0, [1.0, 1.0]),
-            Vertex2D::new(1.0, -1.0, [0.0, 1.0]),
-        ];
-
-        let vertex_buf =
-            self.device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                usage: BufferUsages::VERTEX,
-                contents: bytemuck::cast_slice(&vertices),
-            });
-
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::bytes_of(&self.camera.look_at_rh()),
+            bytemuck::bytes_of(&self.camera.view_rh()),
         );
 
         // GPU work goes here
@@ -295,9 +272,14 @@ impl State {
 
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buf.slice(..));
-            render_pass.draw(0..3, 0..1);
-            //render_pass.draw(3..6, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(
+                self.index_buffer.slice(..),
+                IndexFormat::Uint32,
+            );
+            let index_buffer_len =
+                self.index_buffer.size() as u32 / size_of::<u32>() as u32;
+            render_pass.draw_indexed(0..index_buffer_len, 0, 0..1);
         }
 
         self.queue.submit([encoder.finish()]);
@@ -324,6 +306,36 @@ async fn init_wgpu(
         .unwrap();
     (adapter, device, queue)
 }
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
+#[repr(C)]
+struct Vertex3D {
+    vec3: Vec3,
+    uv: [f32; 2],
+}
+impl Vertex3D {
+    fn new(vec3: Vec3, uv: [f32; 2]) -> Self {
+        Self { vec3, uv }
+    }
+
+    const fn layout() -> VertexBufferLayout<'static> {
+        VertexBufferLayout {
+            array_stride: size_of::<Self>() as u64,
+            step_mode: VertexStepMode::Vertex,
+            attributes: &[
+                VertexAttribute {
+                    format: VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                VertexAttribute {
+                    format: VertexFormat::Float32x2,
+                    offset: size_of::<[f32; 2]>() as u64,
+                    shader_location: 1,
+                },
+            ],
+        }
+    }
+}
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
 #[repr(C)]
@@ -338,9 +350,15 @@ impl Vertex2D {
     }
 }
 pub struct Camera {
+    /// Our position (eye)
     position: Vec3,
     target: Vec3,
     up: Vec3,
+    /// Field of view
+    fov: f32,
+    aspect: f32,
+    near: f32,
+    far: f32,
 }
 
 impl Camera {
@@ -348,15 +366,48 @@ impl Camera {
         Self {
             position: Vec3::new(0.0, 0.0, 0.0),
             target: Vec3::new(0.0, 0.0, -1.0),
-            up: Vec3::new(0.0, 1.0, 0.0),
+            up: Vec3::new_y(),
+            fov: PI / 4.0,
+            aspect: 1.0,
+            near: 0.01,
+            far: 100.0,
         }
+    }
+    pub fn zoom_out(&mut self, speed: f32) {
+        self.fov += speed;
+
+        // Optionally, clamp the fov to a reasonable range
+        const MAX_FOV: f32 = PI / 2.0; // 90 degrees
+        const MIN_FOV: f32 = PI / 16.0; // 11.25 degrees
+
+        if self.fov > MAX_FOV {
+            self.fov = MAX_FOV;
+        } else if self.fov < MIN_FOV {
+            self.fov = MIN_FOV;
+        }
+    }
+    pub fn r#move(&mut self, dx: f32, dy: f32) {
+        self.forward(dy);
+        self.strafe(dx);
+    }
+    pub fn rotate_pitch(&mut self, theta: f32) {
+        let forward = (self.target - self.position).normalise();
+        let right = forward.cross(&self.up).normalise();
+        let rotated = forward.rotate_around(right, theta);
+        self.target = self.position + rotated;
+        self.up = right.cross(&rotated).normalise();
+    }
+    pub fn rotate_yaw(&mut self, angle_rad: f32) {
+        let direction = (self.target - self.position).normalise();
+        let rotated = direction.rotate_around(self.up, angle_rad);
+        self.target = self.position + rotated;
     }
     pub fn forward(&mut self, dy: f32) {
         let forward = (self.target - self.position).normalise();
         let delta = -forward * dy;
 
         self.position += delta;
-        self.target += delta;
+        self.target += delta
     }
     /// + is right
     /// - is left
@@ -376,7 +427,7 @@ impl Camera {
     pub fn strafe_left(&mut self, dx: f32) {
         self.strafe(-dx);
     }
-    pub fn look_at_rh(&self) -> Mat4 {
+    pub fn view_rh(&self) -> Mat4 {
         let forward = (self.target - self.position).normalise();
         let right = forward.cross(&self.up).normalise();
         let up = right.cross(&forward).normalise();
@@ -391,5 +442,22 @@ impl Camera {
             z: Vec4::new(right.z, up.z, -forward.z, 0.0),
             w: Vec4::new(projection_x, projection_y, projection_z, 1.0),
         }
+    }
+    // TODO: its broke
+    pub fn perspective_rh(&self) -> Mat4 {
+        let tan_half_fov = (self.fov / 2.0).tan();
+        let range = self.far - self.near;
+        let depth = -(self.far + self.near) / range;
+        let project = -(2.0 * self.far * self.near) / range;
+        Mat4 {
+            x: Vec4::new(1.0 / (self.aspect * tan_half_fov), 0.0, 0.0, 0.0),
+            y: Vec4::new(0.0, 1.0 / tan_half_fov, 0.0, 0.0),
+            z: Vec4::new(0.0, 0.0, depth, -1.0),
+            w: Vec4::new(0.0, 0.0, project, 1.0),
+        }
+        //Mat4::identity()
+    }
+    pub fn view_perspective_rh(&self) -> [Mat4; 2] {
+        [self.view_rh(), self.perspective_rh()]
     }
 }

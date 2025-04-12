@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -48,6 +50,22 @@ impl App {
             }
             PhysicalKey::Code(KeyCode::ArrowDown) => {
                 self.state.as_mut().unwrap().camera.forward(-0.01);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::KeyY) => {
+                self.state.as_mut().unwrap().camera.rotate_yaw(PI / 16.);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::KeyP) => {
+                self.state.as_mut().unwrap().camera.rotate_pitch(PI / 16.);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::KeyW) => {
+                self.state.as_mut().unwrap().camera.zoom_out(-0.1);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::KeyD) => {
+                self.state.as_mut().unwrap().camera.zoom_out(0.1);
                 self.render();
             }
             _ => {}

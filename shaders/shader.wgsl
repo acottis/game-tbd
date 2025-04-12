@@ -1,9 +1,10 @@
 struct Camera {
-	view_matrix: mat4x4<f32>,
+	view: mat4x4<f32>,
+	projection: mat4x4<f32>,
 }
 
 struct VertexInput {
-    @location(0) vertex: vec2<f32>,
+    @location(0) vertex: vec3<f32>,
     @location(1) uv: vec2<f32>,
 }
 
@@ -22,13 +23,12 @@ var s_diffuse: sampler;
 
 
 @vertex
-fn vs_main(model: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.position = camera.view_matrix * vec4<f32>(model.vertex, 0.0, 1.0);
-    out.uv = model.uv;
+    out.position = camera.projection * camera.view * vec4<f32>(in.vertex, 1.0);
+    out.uv = in.uv;
     return out;
 }
-
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {

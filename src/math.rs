@@ -7,6 +7,17 @@ pub struct Mat4 {
     pub w: Vec4,
 }
 
+impl Mat4 {
+    pub fn identity() -> Self {
+        Self {
+            x: Vec4::new(1.0, 0.0, 0.0, 0.0),
+            y: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            z: Vec4::new(0.0, 0.0, 1.0, 0.0),
+            w: Vec4::new(0.0, 0.0, 0.0, 1.0),
+        }
+    }
+}
+
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Default, Debug)]
 #[repr(C)]
 pub struct Vec4 {
@@ -20,17 +31,10 @@ impl Vec4 {
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
-    pub const fn from_vec3(vec3: Vec3, w: f32) -> Self {
-        Self {
-            x: vec3.x,
-            y: vec3.y,
-            z: vec3.z,
-            w,
-        }
-    }
 }
 
-#[derive(Clone, Copy, Default)]
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Debug)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,
@@ -41,8 +45,32 @@ impl Vec3 {
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
+    pub const fn zeroes() -> Self {
+        Self::new(0.0, 0.0, 0.0)
+    }
+    pub const fn new_y() -> Self {
+        Self::new(0.0, 1.0, 0.0)
+    }
     pub const fn dot(&self, rhs: &Self) -> f32 {
         (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z)
+    }
+    pub fn rotate_around(&self, axis: Vec3, angle: f32) -> Self {
+        let axis = axis.normalise();
+        let cos_theta = angle.cos();
+        let sin_theta = angle.sin();
+        let dot = self.dot(&axis);
+
+        Vec3::new(
+            cos_theta * self.x
+                + sin_theta * (axis.y * self.z - axis.z * self.y)
+                + (1.0 - cos_theta) * axis.x * dot,
+            cos_theta * self.y
+                + sin_theta * (axis.z * self.x - axis.x * self.z)
+                + (1.0 - cos_theta) * axis.y * dot,
+            cos_theta * self.z
+                + sin_theta * (axis.x * self.y - axis.y * self.x)
+                + (1.0 - cos_theta) * axis.z * dot,
+        )
     }
     pub const fn cross(&self, rhs: &Self) -> Self {
         Vec3::new(
@@ -57,9 +85,19 @@ impl Vec3 {
     pub fn normalise(&self) -> Self {
         let len = self.len();
         if len == 0.0 {
-            return Vec3::default();
+            return Vec3::zeroes();
         }
         self / len
+    }
+}
+
+impl From<[f32; 3]> for Vec3 {
+    fn from(value: [f32; 3]) -> Self {
+        Self {
+            x: value[0],
+            y: value[1],
+            z: value[2],
+        }
     }
 }
 
@@ -120,11 +158,12 @@ impl core::ops::Sub for &Vec3 {
 impl core::ops::Mul<f32> for Vec3 {
     type Output = Self;
 
-    fn mul(mut self, rhs: f32) -> Self::Output {
-        self.x *= rhs;
-        self.y *= rhs;
-        self.z *= rhs;
-        self
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
     }
 }
 impl core::ops::Mul for Vec3 {
