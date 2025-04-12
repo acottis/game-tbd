@@ -373,7 +373,7 @@ impl Camera {
         println!("{:?}", self.position);
     }
     pub fn rotate_y(&mut self, theta: f32) {
-        let rotation_matrix = Mat3::rotation_x(theta);
+        let rotation_matrix = Mat3::rotation_y(theta);
         self.position *= rotation_matrix;
         println!("{:?}", self.position);
     }
