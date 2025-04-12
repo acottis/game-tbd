@@ -1,3 +1,30 @@
+#[derive(Debug)]
+pub struct Mat3 {
+    pub x: Vec3,
+    pub y: Vec3,
+    pub z: Vec3,
+}
+impl Mat3 {
+    pub fn rotation_x(theta: f32) -> Self {
+        let cos = theta.cos();
+        let sin = theta.sin();
+        Self {
+            x: Vec3::x(),
+            y: Vec3::new(0.0, cos, sin),
+            z: Vec3::new(0.0, -sin, cos),
+        }
+    }
+    pub fn rotation_y(theta: f32) -> Self {
+        let cos = theta.cos();
+        let sin = theta.sin();
+        Self {
+            x: Vec3::new(cos, 0.0, sin),
+            y: Vec3::y(),
+            z: Vec3::new(-sin, 0.0, cos),
+        }
+    }
+}
+
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct Mat4 {
@@ -48,29 +75,14 @@ impl Vec3 {
     pub const fn zeroes() -> Self {
         Self::new(0.0, 0.0, 0.0)
     }
-    pub const fn new_y() -> Self {
+    pub const fn y() -> Self {
         Self::new(0.0, 1.0, 0.0)
+    }
+    pub const fn x() -> Self {
+        Self::new(1.0, 0.0, 0.0)
     }
     pub const fn dot(&self, rhs: &Self) -> f32 {
         (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z)
-    }
-    pub fn rotate_around(&self, axis: Vec3, angle: f32) -> Self {
-        let axis = axis.normalise();
-        let cos_theta = angle.cos();
-        let sin_theta = angle.sin();
-        let dot = self.dot(&axis);
-
-        Vec3::new(
-            cos_theta * self.x
-                + sin_theta * (axis.y * self.z - axis.z * self.y)
-                + (1.0 - cos_theta) * axis.x * dot,
-            cos_theta * self.y
-                + sin_theta * (axis.z * self.x - axis.x * self.z)
-                + (1.0 - cos_theta) * axis.y * dot,
-            cos_theta * self.z
-                + sin_theta * (axis.x * self.y - axis.y * self.x)
-                + (1.0 - cos_theta) * axis.z * dot,
-        )
     }
     pub const fn cross(&self, rhs: &Self) -> Self {
         Vec3::new(
@@ -100,7 +112,6 @@ impl From<[f32; 3]> for Vec3 {
         }
     }
 }
-
 impl core::ops::Neg for Vec3 {
     type Output = Self;
 
@@ -121,6 +132,17 @@ impl core::ops::Div<f32> for &Vec3 {
             y: self.y / rhs,
             z: self.z / rhs,
         }
+    }
+}
+impl core::ops::MulAssign<Mat3> for Vec3 {
+    fn mul_assign(&mut self, rhs: Mat3) {
+        let x = self.x * rhs.x.x + self.y * rhs.y.x + self.z * rhs.z.x;
+        let y = self.x * rhs.x.y + self.y * rhs.y.y + self.z * rhs.z.y;
+        let z = self.x * rhs.x.z + self.y * rhs.y.z + self.z * rhs.z.z;
+
+        self.x = x;
+        self.y = y;
+        self.z = z;
     }
 }
 impl core::ops::Add for Vec3 {
@@ -164,16 +186,6 @@ impl core::ops::Mul<f32> for Vec3 {
             y: self.y * rhs,
             z: self.z * rhs,
         }
-    }
-}
-impl core::ops::Mul for Vec3 {
-    type Output = Self;
-
-    fn mul(mut self, rhs: Self) -> Self::Output {
-        self.x *= rhs.x;
-        self.y *= rhs.y;
-        self.z *= rhs.z;
-        self
     }
 }
 impl core::ops::AddAssign for Vec3 {

@@ -8,7 +8,7 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::math::{Mat4, Vec3, Vec4};
+use crate::math::{Mat3, Mat4, Vec3, Vec4};
 
 mod models;
 
@@ -54,7 +54,9 @@ impl State {
         });
 
         // Model stuff
-        let mut model = models::load_glb("assets/cube.glb");
+        let model = models::load_glb("assets/cube.glb");
+
+        println!("{:?}", model.vertices);
 
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
@@ -336,19 +338,7 @@ impl Vertex3D {
         }
     }
 }
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
-#[repr(C)]
-struct Vertex2D {
-    x: f32,
-    y: f32,
-    tex_coords: [f32; 2],
-}
-impl Vertex2D {
-    fn new(x: f32, y: f32, tex_coords: [f32; 2]) -> Self {
-        Self { x, y, tex_coords }
-    }
-}
+#[derive(Debug)]
 pub struct Camera {
     /// Our position (eye)
     position: Vec3,
@@ -364,50 +354,34 @@ pub struct Camera {
 impl Camera {
     const fn identity() -> Self {
         Self {
-            position: Vec3::new(0.0, 0.0, 0.0),
-            target: Vec3::new(0.0, 0.0, -1.0),
-            up: Vec3::new_y(),
+            position: Vec3::new(0.0, 0.0, 5.0),
+            target: Vec3::new(0.0, 0.0, 0.0),
+            up: Vec3::y(),
             fov: PI / 4.0,
             aspect: 1.0,
             near: 0.01,
-            far: 100.0,
+            far: 10.0,
         }
     }
-    pub fn zoom_out(&mut self, speed: f32) {
-        self.fov += speed;
-
-        // Optionally, clamp the fov to a reasonable range
-        const MAX_FOV: f32 = PI / 2.0; // 90 degrees
-        const MIN_FOV: f32 = PI / 16.0; // 11.25 degrees
-
-        if self.fov > MAX_FOV {
-            self.fov = MAX_FOV;
-        } else if self.fov < MIN_FOV {
-            self.fov = MIN_FOV;
-        }
-    }
-    pub fn r#move(&mut self, dx: f32, dy: f32) {
+    pub fn move_xy(&mut self, dx: f32, dy: f32) {
         self.forward(dy);
         self.strafe(dx);
     }
-    pub fn rotate_pitch(&mut self, theta: f32) {
-        let forward = (self.target - self.position).normalise();
-        let right = forward.cross(&self.up).normalise();
-        let rotated = forward.rotate_around(right, theta);
-        self.target = self.position + rotated;
-        self.up = right.cross(&rotated).normalise();
+    pub fn rotate_x(&mut self, theta: f32) {
+        let rotation_matrix = Mat3::rotation_x(theta);
+        self.position *= rotation_matrix;
+        println!("{:?}", self.position);
     }
-    pub fn rotate_yaw(&mut self, angle_rad: f32) {
-        let direction = (self.target - self.position).normalise();
-        let rotated = direction.rotate_around(self.up, angle_rad);
-        self.target = self.position + rotated;
+    pub fn rotate_y(&mut self, theta: f32) {
+        let rotation_matrix = Mat3::rotation_x(theta);
+        self.position *= rotation_matrix;
+        println!("{:?}", self.position);
     }
     pub fn forward(&mut self, dy: f32) {
         let forward = (self.target - self.position).normalise();
-        let delta = -forward * dy;
+        let delta = forward * dy;
 
         self.position += delta;
-        self.target += delta
     }
     /// + is right
     /// - is left
@@ -443,7 +417,6 @@ impl Camera {
             w: Vec4::new(projection_x, projection_y, projection_z, 1.0),
         }
     }
-    // TODO: its broke
     pub fn perspective_rh(&self) -> Mat4 {
         let tan_half_fov = (self.fov / 2.0).tan();
         let range = self.far - self.near;

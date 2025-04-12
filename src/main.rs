@@ -45,27 +45,25 @@ impl App {
                 self.render();
             }
             PhysicalKey::Code(KeyCode::ArrowUp) => {
-                self.state.as_mut().unwrap().camera.forward(0.01);
+                self.state.as_mut().unwrap().camera.forward(0.1);
                 self.render();
             }
             PhysicalKey::Code(KeyCode::ArrowDown) => {
-                self.state.as_mut().unwrap().camera.forward(-0.01);
+                self.state.as_mut().unwrap().camera.forward(-0.1);
                 self.render();
             }
             PhysicalKey::Code(KeyCode::KeyY) => {
-                self.state.as_mut().unwrap().camera.rotate_yaw(PI / 16.);
                 self.render();
             }
             PhysicalKey::Code(KeyCode::KeyP) => {
-                self.state.as_mut().unwrap().camera.rotate_pitch(PI / 16.);
                 self.render();
             }
-            PhysicalKey::Code(KeyCode::KeyW) => {
-                self.state.as_mut().unwrap().camera.zoom_out(-0.1);
+            PhysicalKey::Code(KeyCode::KeyA) => {
+                self.state.as_mut().unwrap().camera.rotate_x(PI / 16.0);
                 self.render();
             }
             PhysicalKey::Code(KeyCode::KeyD) => {
-                self.state.as_mut().unwrap().camera.zoom_out(0.1);
+                self.state.as_mut().unwrap().camera.rotate_x(-(PI / 16.0));
                 self.render();
             }
             _ => {}
