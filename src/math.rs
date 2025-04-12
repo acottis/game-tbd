@@ -134,15 +134,15 @@ impl core::ops::Div<f32> for &Vec3 {
         }
     }
 }
-impl core::ops::MulAssign<Mat3> for Vec3 {
-    fn mul_assign(&mut self, rhs: Mat3) {
-        let x = self.x * rhs.x.x + self.y * rhs.y.x + self.z * rhs.z.x;
-        let y = self.x * rhs.x.y + self.y * rhs.y.y + self.z * rhs.z.y;
-        let z = self.x * rhs.x.z + self.y * rhs.y.z + self.z * rhs.z.z;
+impl core::ops::Mul<Vec3> for Mat3 {
+    type Output = Vec3;
 
-        self.x = x;
-        self.y = y;
-        self.z = z;
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        let x = self.x.x * rhs.x + self.y.x * rhs.y + self.z.x * rhs.z;
+        let y = self.x.y * rhs.x + self.y.y * rhs.y + self.z.y * rhs.z;
+        let z = self.x.z * rhs.x + self.y.z * rhs.y + self.z.z * rhs.z;
+
+        Vec3 { x, y, z }
     }
 }
 impl core::ops::Add for Vec3 {

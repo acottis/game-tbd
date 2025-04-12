@@ -1,8 +1,7 @@
 use std::{f32::consts::PI, sync::Arc};
 
 use wgpu::{
-    AddressMode, BufferUsages, FilterMode, IndexFormat, SamplerDescriptor,
-    include_wgsl,
+    BufferUsages, IndexFormat, SamplerDescriptor, include_wgsl,
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
@@ -23,7 +22,6 @@ pub struct State {
     pub camera: Camera,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
-    // TODO
     vertex_buffer: Buffer,
     index_buffer: Buffer,
 }
@@ -45,7 +43,7 @@ impl State {
         surface.configure(&device, &surface_config);
 
         // Camera stuff
-        let camera = Camera::identity();
+        let camera = Camera::new(&window_size);
 
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
@@ -100,12 +98,6 @@ impl State {
         // Sampler
         let texture_view = texture.create_view(&Default::default());
         let sampler = device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: FilterMode::Linear,
             ..Default::default()
         });
 
@@ -264,7 +256,7 @@ impl State {
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::bytes_of(&self.camera.view_rh()),
+            bytemuck::bytes_of(&self.camera.view_perspective_rh()),
         );
 
         // GPU work goes here
@@ -331,7 +323,7 @@ impl Vertex3D {
                 },
                 VertexAttribute {
                     format: VertexFormat::Float32x2,
-                    offset: size_of::<[f32; 2]>() as u64,
+                    offset: size_of::<Vec3>() as u64,
                     shader_location: 1,
                 },
             ],
@@ -352,15 +344,15 @@ pub struct Camera {
 }
 
 impl Camera {
-    const fn identity() -> Self {
+    const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(0.0, 0.0, 5.0),
+            position: Vec3::new(0.0, 0.0, 2.0),
             target: Vec3::new(0.0, 0.0, 0.0),
             up: Vec3::y(),
             fov: PI / 4.0,
-            aspect: 1.0,
-            near: 0.01,
-            far: 10.0,
+            aspect: window_size.width as f32 / window_size.height as f32,
+            near: 0.1,
+            far: 1000.0,
         }
     }
     pub fn move_xy(&mut self, dx: f32, dy: f32) {
@@ -368,14 +360,10 @@ impl Camera {
         self.strafe(dx);
     }
     pub fn rotate_x(&mut self, theta: f32) {
-        let rotation_matrix = Mat3::rotation_x(theta);
-        self.position *= rotation_matrix;
-        println!("{:?}", self.position);
+        self.position = Mat3::rotation_x(theta) * self.position;
     }
     pub fn rotate_y(&mut self, theta: f32) {
-        let rotation_matrix = Mat3::rotation_y(theta);
-        self.position *= rotation_matrix;
-        println!("{:?}", self.position);
+        self.position = Mat3::rotation_y(theta) * self.position;
     }
     pub fn forward(&mut self, dy: f32) {
         let forward = (self.target - self.position).normalise();
@@ -401,7 +389,7 @@ impl Camera {
     pub fn strafe_left(&mut self, dx: f32) {
         self.strafe(-dx);
     }
-    pub fn view_rh(&self) -> Mat4 {
+    fn view_rh(&self) -> Mat4 {
         let forward = (self.target - self.position).normalise();
         let right = forward.cross(&self.up).normalise();
         let up = right.cross(&forward).normalise();
@@ -417,7 +405,7 @@ impl Camera {
             w: Vec4::new(projection_x, projection_y, projection_z, 1.0),
         }
     }
-    pub fn perspective_rh(&self) -> Mat4 {
+    fn perspective_rh(&self) -> Mat4 {
         let tan_half_fov = (self.fov / 2.0).tan();
         let range = self.far - self.near;
         let depth = -(self.far + self.near) / range;
@@ -428,7 +416,6 @@ impl Camera {
             z: Vec4::new(0.0, 0.0, depth, -1.0),
             w: Vec4::new(0.0, 0.0, project, 1.0),
         }
-        //Mat4::identity()
     }
     pub fn view_perspective_rh(&self) -> [Mat4; 2] {
         [self.view_rh(), self.perspective_rh()]
