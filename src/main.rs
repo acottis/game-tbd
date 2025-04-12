@@ -1,7 +1,7 @@
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::WindowEvent,
+    event::{KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
@@ -31,6 +31,28 @@ impl App {
         }
         self.state.as_mut().unwrap().resize(size);
     }
+    fn handle_input(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
+        match event.physical_key {
+            PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
+            PhysicalKey::Code(KeyCode::ArrowLeft) => {
+                self.state.as_mut().unwrap().camera.strafe(-0.01);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::ArrowRight) => {
+                self.state.as_mut().unwrap().camera.strafe(0.01);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::ArrowUp) => {
+                self.state.as_mut().unwrap().camera.forward(0.01);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::ArrowDown) => {
+                self.state.as_mut().unwrap().camera.forward(-0.01);
+                self.render();
+            }
+            _ => {}
+        }
+    }
 }
 
 impl ApplicationHandler for App {
@@ -57,11 +79,8 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
-            WindowEvent::KeyboardInput { event, .. } => {
-                match event.physical_key {
-                    PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
-                    _ => {}
-                }
+            WindowEvent::KeyboardInput { ref event, .. } => {
+                self.handle_input(event_loop, event)
             }
             // Ignored events
             WindowEvent::Moved(_) => {}

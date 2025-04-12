@@ -17,6 +17,8 @@ pub struct State {
     queue: Queue,
     render_pipeline: RenderPipeline,
     texture_bind_group: BindGroup,
+    pub camera: Camera,
+    camera_buffer: Buffer,
     camera_bind_group: BindGroup,
 }
 
@@ -220,7 +222,9 @@ impl State {
             queue,
             render_pipeline,
             texture_bind_group,
+            camera,
             camera_bind_group,
+            camera_buffer,
         }
     }
 
@@ -278,6 +282,12 @@ impl State {
                 contents: bytemuck::cast_slice(&vertices),
             });
 
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::bytes_of(&self.camera.look_at_rh()),
+        );
+
         // GPU work goes here
         {
             let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
@@ -327,21 +337,46 @@ impl Vertex2D {
         Self { x, y, tex_coords }
     }
 }
-struct Camera {
+pub struct Camera {
     position: Vec3,
     target: Vec3,
     up: Vec3,
 }
 
 impl Camera {
-    fn identity() -> Self {
+    const fn identity() -> Self {
         Self {
             position: Vec3::new(0.0, 0.0, 0.0),
             target: Vec3::new(0.0, 0.0, -1.0),
             up: Vec3::new(0.0, 1.0, 0.0),
         }
     }
-    fn look_at_rh(&self) -> Mat4 {
+    pub fn forward(&mut self, dy: f32) {
+        let forward = (self.target - self.position).normalise();
+        let delta = -forward * dy;
+
+        self.position += delta;
+        self.target += delta;
+    }
+    /// + is right
+    /// - is left
+    pub fn strafe(&mut self, dx: f32) {
+        let forward = (self.target - self.position).normalise();
+        let right = forward.cross(&self.up).normalise();
+        let delta = right * dx;
+
+        self.position += delta;
+        self.target += delta;
+    }
+    #[inline(always)]
+    pub fn strafe_right(&mut self, dx: f32) {
+        self.strafe(dx);
+    }
+    #[inline(always)]
+    pub fn strafe_left(&mut self, dx: f32) {
+        self.strafe(-dx);
+    }
+    pub fn look_at_rh(&self) -> Mat4 {
         let forward = (self.target - self.position).normalise();
         let right = forward.cross(&self.up).normalise();
         let up = right.cross(&forward).normalise();

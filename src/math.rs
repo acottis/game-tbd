@@ -17,10 +17,10 @@ pub struct Vec4 {
 }
 
 impl Vec4 {
-    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
-    pub fn from_vec3(vec3: Vec3, w: f32) -> Self {
+    pub const fn from_vec3(vec3: Vec3, w: f32) -> Self {
         Self {
             x: vec3.x,
             y: vec3.y,
@@ -38,21 +38,24 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
-    pub fn dot(&self, rhs: &Self) -> f32 {
+    pub const fn dot(&self, rhs: &Self) -> f32 {
         (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z)
     }
-    pub fn cross(&self, rhs: &Self) -> Self {
+    pub const fn cross(&self, rhs: &Self) -> Self {
         Vec3::new(
             (self.y * rhs.z) - (self.z * rhs.y),
             (self.z * rhs.x) - (self.x * rhs.z),
             (self.x * rhs.y) - (self.y * rhs.x),
         )
     }
+    pub fn len(&self) -> f32 {
+        self.dot(self).sqrt()
+    }
     pub fn normalise(&self) -> Self {
-        let len = (self.dot(self)).sqrt();
+        let len = self.len();
         if len == 0.0 {
             return Vec3::default();
         }
@@ -60,6 +63,17 @@ impl Vec3 {
     }
 }
 
+impl core::ops::Neg for Vec3 {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+}
 impl core::ops::Div<f32> for &Vec3 {
     type Output = Vec3;
 
@@ -103,6 +117,16 @@ impl core::ops::Sub for &Vec3 {
         }
     }
 }
+impl core::ops::Mul<f32> for Vec3 {
+    type Output = Self;
+
+    fn mul(mut self, rhs: f32) -> Self::Output {
+        self.x *= rhs;
+        self.y *= rhs;
+        self.z *= rhs;
+        self
+    }
+}
 impl core::ops::Mul for Vec3 {
     type Output = Self;
 
@@ -111,5 +135,12 @@ impl core::ops::Mul for Vec3 {
         self.y *= rhs.y;
         self.z *= rhs.z;
         self
+    }
+}
+impl core::ops::AddAssign for Vec3 {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
     }
 }
