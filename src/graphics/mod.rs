@@ -229,6 +229,7 @@ impl State {
         self.surface_config.height = size.height;
         self.surface_config.width = size.width;
         self.surface.configure(&self.device, &self.surface_config);
+        self.camera.set_aspect_ratio(&size);
     }
 
     pub fn render(&mut self) {
@@ -245,7 +246,7 @@ impl State {
                 view,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(Color::WHITE),
+                    load: LoadOp::Clear(Color::GREEN),
                     store: StoreOp::Store,
                 },
             })],
@@ -295,7 +296,13 @@ async fn init_wgpu(
         .await
         .unwrap();
     let (device, queue) = adapter
-        .request_device(&DeviceDescriptor::default())
+        .request_device(&DeviceDescriptor {
+            label: None,
+            required_features: Features::default(),
+            required_limits: Limits::default(),
+            memory_hints: MemoryHints::Performance,
+            trace: Trace::Off,
+        })
         .await
         .unwrap();
     (adapter, device, queue)
@@ -346,7 +353,7 @@ pub struct Camera {
 impl Camera {
     const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(0.0, 0.0, 2.0),
+            position: Vec3::new(2.0, 0.0, 0.0),
             target: Vec3::new(0.0, 0.0, 0.0),
             up: Vec3::y(),
             fov: PI / 4.0,
@@ -419,5 +426,9 @@ impl Camera {
     }
     pub fn view_perspective_rh(&self) -> [Mat4; 2] {
         [self.view_rh(), self.perspective_rh()]
+    }
+
+    fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {
+        self.aspect = size.width as f32 / size.height as f32
     }
 }
