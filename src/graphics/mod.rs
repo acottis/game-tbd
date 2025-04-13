@@ -1,7 +1,9 @@
 use std::{f32::consts::PI, sync::Arc};
 
+use models::Model3D;
 use wgpu::{
-    BufferUsages, IndexFormat, SamplerDescriptor, include_wgsl,
+    BindGroup, Buffer, BufferUsages, IndexFormat, SamplerDescriptor,
+    include_wgsl,
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
@@ -18,12 +20,10 @@ pub struct State {
     device: Device,
     queue: Queue,
     render_pipeline: RenderPipeline,
-    texture_bind_group: BindGroup,
     pub camera: Camera,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
-    vertex_buffer: Buffer,
-    index_buffer: Buffer,
+    models: Vec<GPUModel>,
 }
 
 impl State {
@@ -50,56 +50,6 @@ impl State {
             contents: bytemuck::bytes_of(&camera.view_perspective_rh()),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
-
-        // Model stuff
-        let model = models::load_glb("assets/BoxTextured.glb");
-        let model = models::load_glb("assets/cube.glb");
-
-        let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            usage: BufferUsages::INDEX,
-            contents: bytemuck::cast_slice(&model.indices),
-        });
-        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            usage: BufferUsages::VERTEX,
-            contents: bytemuck::cast_slice(&model.vertices),
-        });
-
-        // Image stuff
-        let image = model.images.first().unwrap().to_rgba8();
-
-        let size = Extent3d {
-            width: image.width(),
-            height: image.height(),
-            depth_or_array_layers: 1,
-        };
-        let texture = device.create_texture(&TextureDescriptor {
-            label: None,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8UnormSrgb,
-            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        queue.write_texture(
-            texture.as_image_copy(),
-            &image,
-            TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(image.width() * 4),
-                rows_per_image: Some(image.height()),
-            },
-            size,
-        );
-        // Sampler
-        let texture_view = texture.create_view(&Default::default());
-        let sampler = device.create_sampler(&SamplerDescriptor {
-            ..Default::default()
-        });
-
         let camera_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("Camera Bind Group Layout"),
@@ -123,6 +73,10 @@ impl State {
                     resource: camera_buffer.as_entire_binding(),
                 }],
             });
+
+        let shader = device
+            .create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
+
         let texture_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("Texture Bind Group Layout"),
@@ -147,21 +101,6 @@ impl State {
                     },
                 ],
             });
-        let texture_bind_group =
-            device.create_bind_group(&BindGroupDescriptor {
-                label: Some("Texture Bind Group"),
-                layout: &texture_layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(&texture_view),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
 
         let pipeline_layout =
             device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -169,11 +108,6 @@ impl State {
                 bind_group_layouts: &[&camera_layout, &texture_layout],
                 push_constant_ranges: &[],
             });
-
-        // End Texture Stuff
-
-        let shader = device
-            .create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
 
         let render_pipeline =
             device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -206,6 +140,21 @@ impl State {
                 cache: None,
             });
 
+        // Load models
+        let glb_models = [
+            models::load_glb("assets/BoxTextured.glb"),
+            models::load_glb("assets/cube.glb"),
+        ];
+        let mut models = Vec::new();
+        for model in glb_models {
+            models.push(load_model_into_gpu(
+                &device,
+                &queue,
+                &texture_layout,
+                &model,
+            ));
+        }
+
         println!("{:#?}", adapter.get_info());
 
         Self {
@@ -215,12 +164,10 @@ impl State {
             device,
             queue,
             render_pipeline,
-            texture_bind_group,
             camera,
             camera_bind_group,
             camera_buffer,
-            vertex_buffer,
-            index_buffer,
+            models,
         }
     }
 
@@ -262,18 +209,19 @@ impl State {
         // GPU work goes here
         {
             let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
-            render_pass.set_pipeline(&self.render_pipeline);
 
+            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(
-                self.index_buffer.slice(..),
-                IndexFormat::Uint32,
-            );
-            let index_buffer_len =
-                self.index_buffer.size() as u32 / size_of::<u32>() as u32;
-            render_pass.draw_indexed(0..index_buffer_len, 0, 0..1);
+
+            for model in &self.models {
+                render_pass.set_bind_group(1, &model.texture_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, model.vertex.slice(..));
+                render_pass.set_index_buffer(
+                    model.index.slice(..),
+                    IndexFormat::Uint32,
+                );
+                render_pass.draw_indexed(0..model.indices_size, 0, 0..1);
+            }
         }
 
         self.queue.submit([encoder.finish()]);
@@ -306,6 +254,85 @@ async fn init_wgpu(
         .unwrap();
     (adapter, device, queue)
 }
+
+pub struct GPUModel {
+    pub vertex: Buffer,
+    pub index: Buffer,
+    pub indices_size: u32,
+    pub texture_bind_group: BindGroup,
+}
+
+fn load_model_into_gpu(
+    device: &Device,
+    queue: &Queue,
+    texture_layout: &BindGroupLayout,
+    model: &Model3D,
+) -> GPUModel {
+    let index = device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        usage: BufferUsages::INDEX,
+        contents: bytemuck::cast_slice(&model.indices),
+    });
+    let vertex = device.create_buffer_init(&BufferInitDescriptor {
+        label: None,
+        usage: BufferUsages::VERTEX,
+        contents: bytemuck::cast_slice(&model.vertices),
+    });
+
+    let image = model.images.first().unwrap().to_rgba8();
+
+    let size = Extent3d {
+        width: image.width(),
+        height: image.height(),
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&TextureDescriptor {
+        label: None,
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: TextureFormat::Rgba8UnormSrgb,
+        usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        texture.as_image_copy(),
+        &image,
+        TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(image.width() * 4),
+            rows_per_image: Some(image.height()),
+        },
+        size,
+    );
+
+    // Sampler
+    let texture_view = texture.create_view(&Default::default());
+    let sampler = device.create_sampler(&SamplerDescriptor::default());
+    let texture_bind_group = device.create_bind_group(&BindGroupDescriptor {
+        label: Some("Texture Bind Group"),
+        layout: &texture_layout,
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::TextureView(&texture_view),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+
+    GPUModel {
+        vertex,
+        index,
+        indices_size: model.indices.len() as u32,
+        texture_bind_group,
+    }
+}
+
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
 #[repr(C)]
 struct Vertex3D {
@@ -345,12 +372,12 @@ pub struct Camera {
 impl Camera {
     const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(0.0, 0.0, -2.0),
-            target: Vec3::new(0.001, 0.001, 0.001),
+            position: Vec3::new(0.0, 1.0, 2.0),
+            target: Vec3::new(0.0, 0.0, 0.0),
             up: Vec3::new(0.0, 1.0, 0.0),
             fovy: PI / 4.0,
             aspect: window_size.width as f32 / window_size.height as f32,
-            near: 0.01,
+            near: 0.1,
             far: 100.0,
         }
     }
@@ -360,23 +387,21 @@ impl Camera {
     }
     pub fn rotate_x(&mut self, theta: f32) {
         self.position = Mat3::rotation_x(theta) * self.position;
-        println!("{:?}", self.position)
     }
     pub fn rotate_y(&mut self, theta: f32) {
         self.position = Mat3::rotation_y(theta) * self.position;
     }
-    pub fn forward(&mut self, dy: f32) {
+    pub fn forward(&mut self, speed: f32) {
         let forward = (self.target - self.position).normalise();
-        let delta = forward * dy;
 
-        self.position += delta;
+        self.position += forward * speed;
     }
     /// + is right
     /// - is left
-    pub fn strafe(&mut self, dx: f32) {
+    pub fn strafe(&mut self, speed: f32) {
         let forward = (self.target - self.position).normalise();
         let right = forward.cross(&self.up).normalise();
-        let delta = right * dx;
+        let delta = right * speed;
 
         self.position += delta;
         self.target += delta;
