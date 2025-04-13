@@ -148,7 +148,7 @@ impl State {
         ];
         let mut models = Vec::new();
         for model in glb_models {
-            models.push(load_model_into_gpu(
+            models.push(GPUModel::new(
                 &device,
                 &queue,
                 &texture_layout,
@@ -255,81 +255,84 @@ async fn init_wgpu(
     (adapter, device, queue)
 }
 
-pub struct GPUModel {
-    pub vertex: Buffer,
-    pub index: Buffer,
-    pub indices_size: u32,
-    pub texture_bind_group: BindGroup,
+struct GPUModel {
+    vertex: Buffer,
+    index: Buffer,
+    indices_size: u32,
+    texture_bind_group: BindGroup,
 }
 
-fn load_model_into_gpu(
-    device: &Device,
-    queue: &Queue,
-    texture_layout: &BindGroupLayout,
-    model: &Model3D,
-) -> GPUModel {
-    let index = device.create_buffer_init(&BufferInitDescriptor {
-        label: None,
-        usage: BufferUsages::INDEX,
-        contents: bytemuck::cast_slice(&model.indices),
-    });
-    let vertex = device.create_buffer_init(&BufferInitDescriptor {
-        label: None,
-        usage: BufferUsages::VERTEX,
-        contents: bytemuck::cast_slice(&model.vertices),
-    });
+impl GPUModel {
+    fn new(
+        device: &Device,
+        queue: &Queue,
+        texture_layout: &BindGroupLayout,
+        model: &Model3D,
+    ) -> GPUModel {
+        let index = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            usage: BufferUsages::INDEX,
+            contents: bytemuck::cast_slice(&model.indices),
+        });
+        let vertex = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            usage: BufferUsages::VERTEX,
+            contents: bytemuck::cast_slice(&model.vertices),
+        });
 
-    let image = model.images.first().unwrap().to_rgba8();
+        let image = model.images.first().unwrap().to_rgba8();
 
-    let size = Extent3d {
-        width: image.width(),
-        height: image.height(),
-        depth_or_array_layers: 1,
-    };
-    let texture = device.create_texture(&TextureDescriptor {
-        label: None,
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: TextureDimension::D2,
-        format: TextureFormat::Rgba8UnormSrgb,
-        usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
-    queue.write_texture(
-        texture.as_image_copy(),
-        &image,
-        TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(image.width() * 4),
-            rows_per_image: Some(image.height()),
-        },
-        size,
-    );
-
-    // Sampler
-    let texture_view = texture.create_view(&Default::default());
-    let sampler = device.create_sampler(&SamplerDescriptor::default());
-    let texture_bind_group = device.create_bind_group(&BindGroupDescriptor {
-        label: Some("Texture Bind Group"),
-        layout: &texture_layout,
-        entries: &[
-            BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::TextureView(&texture_view),
+        let size = Extent3d {
+            width: image.width(),
+            height: image.height(),
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            texture.as_image_copy(),
+            &image,
+            TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(image.width() * 4),
+                rows_per_image: Some(image.height()),
             },
-            BindGroupEntry {
-                binding: 1,
-                resource: BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
+            size,
+        );
 
-    GPUModel {
-        vertex,
-        index,
-        indices_size: model.indices.len() as u32,
-        texture_bind_group,
+        // Sampler
+        let texture_view = texture.create_view(&Default::default());
+        let sampler = device.create_sampler(&SamplerDescriptor::default());
+        let texture_bind_group =
+            device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Texture Bind Group"),
+                layout: &texture_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
+        GPUModel {
+            vertex,
+            index,
+            indices_size: model.indices.len() as u32,
+            texture_bind_group,
+        }
     }
 }
 
