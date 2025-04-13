@@ -3,8 +3,6 @@ use std::{f32::consts::PI, num::NonZeroU64, sync::Arc};
 use bytemuck::bytes_of;
 use models::Model3D;
 use wgpu::{
-    BindGroup, Buffer, BufferUsages, IndexFormat, SamplerDescriptor,
-    include_wgsl,
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
@@ -132,7 +130,7 @@ impl State {
                     topology: PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
+                    cull_mode: Some(Face::Back),
                     unclipped_depth: false,
                     polygon_mode: PolygonMode::Fill,
                     conservative: false,
@@ -342,8 +340,8 @@ struct Vertex3D {
     uv: [f32; 2],
 }
 impl Vertex3D {
-    const ATTRIBUTES: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+    const ATTRIBUTES: [VertexAttribute; 2] =
+        vertex_attr_array![0 => Float32x3, 1 => Float32x2];
 
     fn new(vec3: Vec3, uv: [f32; 2]) -> Self {
         Self { vec3, uv }
