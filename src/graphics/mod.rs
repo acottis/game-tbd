@@ -1,5 +1,6 @@
-use std::{f32::consts::PI, sync::Arc};
+use std::{f32::consts::PI, num::NonZeroU64, sync::Arc};
 
+use bytemuck::bytes_of;
 use models::Model3D;
 use wgpu::{
     BindGroup, Buffer, BufferUsages, IndexFormat, SamplerDescriptor,
@@ -47,7 +48,7 @@ impl State {
 
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: bytemuck::bytes_of(&camera.view_perspective_rh()),
+            contents: bytes_of(&camera.view_perspective_rh()),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
         let camera_layout =
@@ -58,7 +59,9 @@ impl State {
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: None,
+                        min_binding_size: NonZeroU64::new(
+                            size_of::<CameraUniform>() as u64,
+                        ),
                     },
                     visibility: ShaderStages::VERTEX,
                     count: None,
@@ -180,8 +183,7 @@ impl State {
 
     pub fn render(&mut self) {
         let frame = self.surface.get_current_texture().unwrap();
-        let view =
-            &frame.texture.create_view(&TextureViewDescriptor::default());
+        let view = &frame.texture.create_view(&Default::default());
 
         let mut encoder =
             self.device.create_command_encoder(&Default::default());
@@ -192,8 +194,8 @@ impl State {
                 view,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(Color::GREEN),
-                    store: StoreOp::Store,
+                    load: LoadOp::Clear(Default::default()),
+                    store: StoreOp::Discard,
                 },
             })],
             depth_stencil_attachment: None,
@@ -203,7 +205,7 @@ impl State {
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
-            bytemuck::bytes_of(&self.camera.view_perspective_rh()),
+            bytes_of(&self.camera.view_perspective_rh()),
         );
 
         // GPU work goes here
@@ -355,6 +357,14 @@ impl Vertex3D {
         }
     }
 }
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
+#[repr(C)]
+struct CameraUniform {
+    view: Mat4,
+    projection: Mat4,
+}
+
 #[derive(Debug)]
 pub struct Camera {
     /// Our position (eye)
@@ -381,10 +391,6 @@ impl Camera {
             far: 100.0,
         }
     }
-    pub fn move_xy(&mut self, dx: f32, dy: f32) {
-        self.forward(dy);
-        self.strafe(dx);
-    }
     pub fn rotate_x(&mut self, theta: f32) {
         self.position = Mat3::rotation_x(theta) * self.position;
     }
@@ -405,14 +411,6 @@ impl Camera {
 
         self.position += delta;
         self.target += delta;
-    }
-    #[inline(always)]
-    pub fn strafe_right(&mut self, dx: f32) {
-        self.strafe(dx);
-    }
-    #[inline(always)]
-    pub fn strafe_left(&mut self, dx: f32) {
-        self.strafe(-dx);
     }
     fn view_rh(&self) -> Mat4 {
         let forward = (self.target - self.position).normalise();
@@ -442,8 +440,11 @@ impl Camera {
             w: Vec4::new(0.0, 0.0, project, 0.0),
         }
     }
-    pub fn view_perspective_rh(&self) -> [Mat4; 2] {
-        [self.view_rh(), self.perspective_rh()]
+    fn view_perspective_rh(&self) -> CameraUniform {
+        CameraUniform {
+            view: self.view_rh(),
+            projection: self.perspective_rh(),
+        }
     }
 
     fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {
