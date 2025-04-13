@@ -58,16 +58,16 @@ impl App {
             PhysicalKey::Code(KeyCode::KeyP) => {
                 self.render();
             }
-            PhysicalKey::Code(KeyCode::KeyA) => {
-                self.state.as_mut().unwrap().camera.rotate_x(PI / 16.0);
-                self.render();
-            }
             PhysicalKey::Code(KeyCode::KeyW) => {
                 self.state.as_mut().unwrap().camera.rotate_y(PI / 16.0);
                 self.render();
             }
             PhysicalKey::Code(KeyCode::KeyS) => {
                 self.state.as_mut().unwrap().camera.rotate_y(-PI / 16.0);
+                self.render();
+            }
+            PhysicalKey::Code(KeyCode::KeyA) => {
+                self.state.as_mut().unwrap().camera.rotate_x(PI / 16.0);
                 self.render();
             }
             PhysicalKey::Code(KeyCode::KeyD) => {

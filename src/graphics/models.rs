@@ -32,6 +32,17 @@ pub fn load_glb(path: impl AsRef<Path>) -> Model3D {
     let mut index_buffer = Vec::with_capacity(1000);
     let mut images = Vec::with_capacity(10);
 
+    println!("{}", document.images().len());
+    println!("{}", document.scenes().len());
+    println!("{}", document.meshes().len());
+    println!("{}", document.nodes().len());
+    println!("{}", document.skins().len());
+    println!("{}", document.materials().len());
+    println!("{}", document.accessors().len());
+    println!("{}", document.textures().len());
+    println!("{}", document.samplers().len());
+    println!("{}", document.cameras().len());
+
     for mesh in document.meshes() {
         for primitive in mesh.primitives() {
             let reader = primitive.reader(|p| Some(&buffer[p.index()]));

@@ -9,9 +9,9 @@ impl Mat3 {
         let cos = theta.cos();
         let sin = theta.sin();
         Self {
-            x: Vec3::x(),
-            y: Vec3::new(0.0, cos, sin),
-            z: Vec3::new(0.0, -sin, cos),
+            x: Vec3::new(1.0, 0.0, 0.0),
+            y: Vec3::new(0.0, cos, -sin),
+            z: Vec3::new(0.0, sin, cos),
         }
     }
     pub fn rotation_y(theta: f32) -> Self {
@@ -19,8 +19,17 @@ impl Mat3 {
         let sin = theta.sin();
         Self {
             x: Vec3::new(cos, 0.0, sin),
-            y: Vec3::y(),
+            y: Vec3::new(0.0, 1.0, 0.0),
             z: Vec3::new(-sin, 0.0, cos),
+        }
+    }
+    pub fn rotation_z(theta: f32) -> Self {
+        let cos = theta.cos();
+        let sin = theta.sin();
+        Self {
+            x: Vec3::new(cos, -sin, 0.0),
+            y: Vec3::new(sin, cos, 0.0),
+            z: Vec3::new(0.0, 0.0, 1.0),
         }
     }
 }
@@ -41,14 +50,6 @@ impl Mat4 {
             y: Vec4::new(0.0, 1.0, 0.0, 0.0),
             z: Vec4::new(0.0, 0.0, 1.0, 0.0),
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
-        }
-    }
-    pub fn transpose(self: Mat4) -> Self {
-        Self {
-            x: Vec4::new(self.x.x, self.y.x, self.z.x, self.w.x),
-            y: Vec4::new(self.x.y, self.y.y, self.z.y, self.w.y),
-            z: Vec4::new(self.x.z, self.y.z, self.z.z, self.w.z),
-            w: Vec4::new(self.x.w, self.y.w, self.z.w, self.w.w),
         }
     }
 }

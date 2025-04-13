@@ -52,9 +52,8 @@ impl State {
         });
 
         // Model stuff
+        let model = models::load_glb("assets/BoxTextured.glb");
         let model = models::load_glb("assets/cube.glb");
-
-        println!("{:?}", model.vertices);
 
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
@@ -196,7 +195,7 @@ impl State {
                     topology: PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: FrontFace::Ccw,
-                    cull_mode: None,
+                    cull_mode: Some(wgpu::Face::Back),
                     unclipped_depth: false,
                     polygon_mode: PolygonMode::Fill,
                     conservative: false,
@@ -314,6 +313,9 @@ struct Vertex3D {
     uv: [f32; 2],
 }
 impl Vertex3D {
+    const ATTRIBUTES: [wgpu::VertexAttribute; 2] =
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+
     fn new(vec3: Vec3, uv: [f32; 2]) -> Self {
         Self { vec3, uv }
     }
@@ -322,18 +324,7 @@ impl Vertex3D {
         VertexBufferLayout {
             array_stride: size_of::<Self>() as u64,
             step_mode: VertexStepMode::Vertex,
-            attributes: &[
-                VertexAttribute {
-                    format: VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x2,
-                    offset: size_of::<Vec3>() as u64,
-                    shader_location: 1,
-                },
-            ],
+            attributes: &Self::ATTRIBUTES,
         }
     }
 }
@@ -341,10 +332,11 @@ impl Vertex3D {
 pub struct Camera {
     /// Our position (eye)
     position: Vec3,
+    /// The center of what we are looking at, rotations are relative to target
     target: Vec3,
     up: Vec3,
     /// Field of view
-    fov: f32,
+    fovy: f32,
     aspect: f32,
     near: f32,
     far: f32,
@@ -353,13 +345,13 @@ pub struct Camera {
 impl Camera {
     const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(2.0, 0.0, 0.0),
-            target: Vec3::new(0.0, 0.0, 0.0),
-            up: Vec3::y(),
-            fov: PI / 4.0,
+            position: Vec3::new(0.0, 0.0, -2.0),
+            target: Vec3::new(0.001, 0.001, 0.001),
+            up: Vec3::new(0.0, 1.0, 0.0),
+            fovy: PI / 4.0,
             aspect: window_size.width as f32 / window_size.height as f32,
-            near: 0.1,
-            far: 1000.0,
+            near: 0.01,
+            far: 100.0,
         }
     }
     pub fn move_xy(&mut self, dx: f32, dy: f32) {
@@ -368,6 +360,7 @@ impl Camera {
     }
     pub fn rotate_x(&mut self, theta: f32) {
         self.position = Mat3::rotation_x(theta) * self.position;
+        println!("{:?}", self.position)
     }
     pub fn rotate_y(&mut self, theta: f32) {
         self.position = Mat3::rotation_y(theta) * self.position;
@@ -413,15 +406,15 @@ impl Camera {
         }
     }
     fn perspective_rh(&self) -> Mat4 {
-        let tan_half_fov = (self.fov / 2.0).tan();
+        let tan_half_fov = 1.0 / (self.fovy / 2.0).tan();
         let range = self.far - self.near;
         let depth = -(self.far + self.near) / range;
         let project = -(2.0 * self.far * self.near) / range;
         Mat4 {
-            x: Vec4::new(1.0 / (self.aspect * tan_half_fov), 0.0, 0.0, 0.0),
-            y: Vec4::new(0.0, 1.0 / tan_half_fov, 0.0, 0.0),
+            x: Vec4::new(tan_half_fov / self.aspect, 0.0, 0.0, 0.0),
+            y: Vec4::new(0.0, tan_half_fov, 0.0, 0.0),
             z: Vec4::new(0.0, 0.0, depth, -1.0),
-            w: Vec4::new(0.0, 0.0, project, 1.0),
+            w: Vec4::new(0.0, 0.0, project, 0.0),
         }
     }
     pub fn view_perspective_rh(&self) -> [Mat4; 2] {
