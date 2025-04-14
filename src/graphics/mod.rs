@@ -195,7 +195,8 @@ impl State {
                 resolve_target: None,
                 ops: Operations {
                     load: LoadOp::Clear(Default::default()),
-                    store: StoreOp::Discard,
+                    // WARNING: This is important to vulkan but not dx12
+                    store: StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
@@ -391,7 +392,7 @@ pub struct Camera {
 impl Camera {
     const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(0.0, 1.0, 2.0),
+            position: Vec3::new(0.5, 1.0, 2.0),
             target: Vec3::new(0.0, 0.0, 0.0),
             up: Vec3::new(0.0, 1.0, 0.0),
             fovy: PI / 4.0,
