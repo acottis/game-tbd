@@ -8,5 +8,5 @@ bytemuck = { version = "1.22.0", default-features = false }
 gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
 image = { version = "0.25.6", default-features = false, features = ["jpeg"] }
 pollster = { version = "0.4.0", default-features = false }
-wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "dx12"] }
+wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "dx12", "vulkan", "gles"] }
 winit = { version = "0.30.9", default-features = false, features = ["rwh_06"] }

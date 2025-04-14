@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, num::NonZeroU64, sync::Arc};
+use std::{f32::consts::PI, num::NonZeroU64, sync::Arc, time::Instant};
 
 use bytemuck::bytes_of;
 use models::Model3D;
@@ -23,6 +23,7 @@ pub struct State {
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
     models: Vec<GPUModel>,
+    last_frame_time: Instant,
 }
 
 impl State {
@@ -169,6 +170,7 @@ impl State {
             camera_bind_group,
             camera_buffer,
             models,
+            last_frame_time: Instant::now(),
         }
     }
 
@@ -227,6 +229,12 @@ impl State {
         self.queue.submit([encoder.finish()]);
         self.window.pre_present_notify();
         frame.present();
+        let now = Instant::now();
+        let dt = Instant::now()
+            .duration_since(self.last_frame_time)
+            .as_secs_f64();
+        println!("FPS: {}", 1.0 / dt);
+        self.last_frame_time = now;
     }
 }
 
@@ -389,7 +397,7 @@ impl Camera {
             fovy: PI / 4.0,
             aspect: window_size.width as f32 / window_size.height as f32,
             near: 0.1,
-            far: 100.0,
+            far: 1000.0,
         }
     }
     pub fn rotate_x(&mut self, theta: f32) {

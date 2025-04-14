@@ -52,6 +52,15 @@ impl Mat4 {
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
+    pub fn transpose(&self) -> Self {
+        let m = self;
+        Self {
+            x: Vec4::new(m.x.x, m.y.x, m.z.x, m.w.x),
+            y: Vec4::new(m.x.y, m.y.y, m.z.y, m.w.y),
+            z: Vec4::new(m.x.z, m.y.z, m.z.z, m.w.z),
+            w: Vec4::new(m.x.w, m.y.w, m.z.w, m.w.w),
+        }
+    }
 }
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Default, Debug)]
