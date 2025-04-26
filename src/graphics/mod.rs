@@ -1,9 +1,7 @@
-use std::{
-    default, f32::consts::PI, num::NonZeroU64, sync::Arc, time::Instant,
-};
+use std::{f32::consts::PI, num::NonZeroU64, sync::Arc, time::Instant};
 
 use bytemuck::bytes_of;
-use models::Model3D;
+use models::{Material, Model3D};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
@@ -311,16 +309,16 @@ impl GpuModel {
 
         let sampler = device.create_sampler(&SamplerDescriptor::default());
 
-        let bind_group = if let Some(ref image) = model.material.image {
-            let material_uniform =
-                MaterialUniform::new(model.material.base_colour, true);
-            let material_uniform_buffer =
-                device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    usage: BufferUsages::UNIFORM,
-                    contents: bytes_of(&material_uniform),
-                });
+        let material_uniform = MaterialUniform::from(&model.material);
 
+        let material_uniform_buffer =
+            device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                usage: BufferUsages::UNIFORM,
+                contents: bytes_of(&material_uniform),
+            });
+
+        let bind_group = if let Some(ref image) = model.material.image {
             let image = image.to_rgba8();
             let size = Extent3d {
                 width: image.width(),
@@ -368,16 +366,6 @@ impl GpuModel {
                 ],
             })
         } else {
-            let material_uniform =
-                MaterialUniform::new(model.material.base_colour, false);
-
-            let material_uniform_buffer =
-                device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    usage: BufferUsages::UNIFORM,
-                    contents: bytes_of(&material_uniform),
-                });
-
             let texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
@@ -449,15 +437,19 @@ impl Vertex3D {
 #[repr(C)]
 struct MaterialUniform {
     base_colour: [f32; 4],
+    metallic: f32,
+    roughness: f32,
     has_texture: u32,
-    _padding: [u8; 12],
+    _padding: [u8; 4],
 }
 
-impl MaterialUniform {
-    fn new(base_colour: [f32; 4], has_texture: bool) -> Self {
+impl From<&Material> for MaterialUniform {
+    fn from(value: &Material) -> Self {
         Self {
-            has_texture: has_texture as _,
-            base_colour,
+            base_colour: value.base_colour,
+            metallic: value.metallic,
+            roughness: value.roughness,
+            has_texture: value.image.is_some() as _,
             _padding: Default::default(),
         }
     }

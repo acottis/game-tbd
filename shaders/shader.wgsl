@@ -5,6 +5,8 @@ struct Camera {
 
 struct Material {
     base_colour: vec4<f32>,
+	metallic: f32,
+	roughness: f32,
 	has_texture: u32,
 }
 
