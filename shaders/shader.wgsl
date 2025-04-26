@@ -3,6 +3,11 @@ struct Camera {
 	projection: mat4x4<f32>,
 }
 
+struct Material {
+    base_colour: vec4<f32>,
+	has_texture: u32,
+}
+
 struct VertexInput {
     @location(0) vertex: vec3<f32>,
     @location(1) uv: vec2<f32>,
@@ -17,8 +22,10 @@ struct VertexOutput {
 var<uniform> camera: Camera;
 
 @group(1) @binding(0)
-var t_diffuse: texture_2d<f32>;
+var<uniform> material: Material;
 @group(1) @binding(1)
+var t_diffuse: texture_2d<f32>;
+@group(1) @binding(2)
 var s_diffuse: sampler;
 
 
@@ -32,5 +39,9 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_diffuse, s_diffuse, in.uv);
+    if material.has_texture == 1 {
+        return material.base_colour * textureSample(t_diffuse, s_diffuse, in.uv);
+    } else {
+        return material.base_colour;
+    }
 }
