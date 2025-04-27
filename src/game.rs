@@ -28,6 +28,9 @@ impl Entity {
             self.position.y = 0.0;
         }
     }
+    fn apply_gravity(&mut self, delta_time: f32) {
+        self.position += Vec3::new(0.0, GRAVITY, 0.0) * delta_time;
+    }
 }
 
 pub struct Game {
@@ -46,7 +49,7 @@ impl Game {
     pub fn update(&mut self, delta_time: f32) {
         for entity in self.entities.iter_mut() {
             if entity.physics {
-                entity.position += Vec3::new(0.0, GRAVITY, 0.0) * delta_time;
+                entity.apply_gravity(delta_time);
                 entity.check_collision();
             }
         }
