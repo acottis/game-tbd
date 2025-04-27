@@ -22,7 +22,7 @@ pub enum Asset {
 }
 
 pub struct State {
-    window: Arc<Window>,
+    pub window: Arc<Window>,
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
     device: Device,
@@ -375,12 +375,6 @@ impl State {
         self.queue.submit([encoder.finish()]);
         self.window.pre_present_notify();
         frame.present();
-        let now = Instant::now();
-        let dt = Instant::now()
-            .duration_since(self.last_frame_time)
-            .as_secs_f64();
-        println!("FPS: {}", 1.0 / dt);
-        self.last_frame_time = now;
     }
 }
 

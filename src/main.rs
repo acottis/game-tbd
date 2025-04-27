@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, time::Instant};
 
 use game::Game;
 use winit::{
@@ -13,11 +13,14 @@ use winit::{
 mod game;
 mod graphics;
 mod math;
+mod physics;
 use graphics::State;
 
 struct App {
     state: Option<State>,
     game: Game,
+    last_frame_time: Instant,
+    delta_time: f32,
 }
 
 impl App {
@@ -25,6 +28,8 @@ impl App {
         Self {
             state: None,
             game: Game::new(),
+            last_frame_time: Instant::now(),
+            delta_time: 0.0,
         }
     }
 
@@ -84,6 +89,19 @@ impl ApplicationHandler for App {
         self.init(window);
     }
 
+    fn about_to_wait(&mut self, _: &ActiveEventLoop) {
+        let now = Instant::now();
+        self.delta_time =
+            now.duration_since(self.last_frame_time).as_secs_f32();
+        self.last_frame_time = now;
+        println!("FPS: {}", 1.0 / self.delta_time);
+        //println!("FPS: {}", self.delta_time);
+
+        self.game.update(self.delta_time);
+
+        self.render();
+    }
+
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -91,9 +109,6 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::RedrawRequested => {
-                self.render();
-            }
             WindowEvent::Resized(size) => {
                 self.resize(size);
             }
@@ -102,13 +117,13 @@ impl ApplicationHandler for App {
             }
             WindowEvent::KeyboardInput { ref event, .. } => {
                 self.handle_input(event_loop, event);
-                self.render();
+                self.state.as_ref().unwrap().window.request_redraw();
             }
             // Ignored events
             WindowEvent::Moved(_) => {}
             WindowEvent::CursorMoved { .. } => {}
             _ => println!("{event:?}"),
-        }
+        };
     }
 }
 
