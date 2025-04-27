@@ -150,6 +150,9 @@ impl Vec3 {
     pub const fn zeroes() -> Self {
         Self::new(0.0, 0.0, 0.0)
     }
+    pub const fn xyz(xyz: f32) -> Self {
+        Self::new(xyz, xyz, xyz)
+    }
     pub const fn y() -> Self {
         Self::new(0.0, 1.0, 0.0)
     }

@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 
+use game::Game;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -9,22 +10,32 @@ use winit::{
     window::{Window, WindowId},
 };
 
+mod game;
 mod graphics;
 mod math;
 use graphics::State;
 
-#[derive(Default)]
 struct App {
     state: Option<State>,
+    game: Game,
 }
 
 impl App {
+    fn new() -> Self {
+        Self {
+            state: None,
+            game: Game::new(),
+        }
+    }
+
     fn init(&mut self, window: Window) {
-        self.state = Some(State::new(window))
+        let mut state = State::new(window);
+        state.load_models();
+        self.state = Some(state)
     }
 
     fn render(&mut self) {
-        self.state.as_mut().unwrap().render();
+        self.state.as_mut().unwrap().render(&self.game.entities);
     }
 
     fn resize(&mut self, size: PhysicalSize<u32>) {
@@ -38,41 +49,27 @@ impl App {
             PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
             PhysicalKey::Code(KeyCode::ArrowLeft) => {
                 self.state.as_mut().unwrap().camera.strafe(-0.01);
-                self.render();
             }
             PhysicalKey::Code(KeyCode::ArrowRight) => {
                 self.state.as_mut().unwrap().camera.strafe(0.01);
-                self.render();
             }
             PhysicalKey::Code(KeyCode::ArrowUp) => {
                 self.state.as_mut().unwrap().camera.forward(0.1);
-                self.render();
             }
             PhysicalKey::Code(KeyCode::ArrowDown) => {
                 self.state.as_mut().unwrap().camera.forward(-0.1);
-                self.render();
             }
-            PhysicalKey::Code(KeyCode::KeyY) => {
-                self.render();
-            }
-            PhysicalKey::Code(KeyCode::KeyP) => {
-                self.render();
-            }
-            PhysicalKey::Code(KeyCode::KeyA) => {
+            PhysicalKey::Code(KeyCode::KeyH) => {
                 self.state.as_mut().unwrap().camera.rotate_y(PI / 16.0);
-                self.render();
             }
-            PhysicalKey::Code(KeyCode::KeyD) => {
+            PhysicalKey::Code(KeyCode::KeyK) => {
                 self.state.as_mut().unwrap().camera.rotate_y(-PI / 16.0);
-                self.render();
             }
-            PhysicalKey::Code(KeyCode::KeyW) => {
+            PhysicalKey::Code(KeyCode::KeyU) => {
                 self.state.as_mut().unwrap().camera.rotate_x(PI / 16.0);
-                self.render();
             }
-            PhysicalKey::Code(KeyCode::KeyS) => {
+            PhysicalKey::Code(KeyCode::KeyJ) => {
                 self.state.as_mut().unwrap().camera.rotate_x(-PI / 16.0);
-                self.render();
             }
             _ => {}
         }
@@ -104,7 +101,8 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { ref event, .. } => {
-                self.handle_input(event_loop, event)
+                self.handle_input(event_loop, event);
+                self.render();
             }
             // Ignored events
             WindowEvent::Moved(_) => {}
@@ -117,5 +115,5 @@ impl ApplicationHandler for App {
 fn main() {
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop.run_app(&mut App::default()).unwrap();
+    event_loop.run_app(&mut App::new()).unwrap();
 }

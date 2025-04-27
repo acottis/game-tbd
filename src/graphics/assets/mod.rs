@@ -3,48 +3,7 @@ use std::path::Path;
 use gltf::{Document, Node, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
-use crate::math::Vec3;
-
-use super::models::Vertex3D;
-
-pub struct Material {
-    pub base_colour: [f32; 4],
-    pub metallic: f32,
-    pub roughness: f32,
-    pub image: Option<DynamicImage>,
-}
-
-impl Default for Material {
-    fn default() -> Self {
-        Self {
-            base_colour: [1.0, 1.0, 1.0, 1.0],
-            metallic: 0.0,
-            roughness: 1.0,
-            image: None,
-        }
-    }
-}
-
-pub struct Model3D {
-    pub vertices: Vec<Vertex3D>,
-    pub indices: Vec<u32>,
-    pub material: Material,
-    pub translation: Vec3,
-}
-impl Model3D {
-    fn new(
-        vertices: Vec<Vertex3D>,
-        indices: Vec<u32>,
-        material: Material,
-    ) -> Self {
-        Self {
-            vertices,
-            indices,
-            material,
-            translation: Vec3::new(0.0, 0.0, 0.0),
-        }
-    }
-}
+use super::models::{Material, Model3D, Vertex3D};
 
 fn load_texture(
     info: Option<Info>,

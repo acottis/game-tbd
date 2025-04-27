@@ -1,20 +1,25 @@
 use std::{num::NonZeroU64, sync::Arc, time::Instant};
 
-use assets::{Model3D, load_glb};
+use assets::load_glb;
 use bytemuck::bytes_of;
 use camera::Camera;
-use models::{MaterialUniform, Vertex3D};
+use models::{MaterialUniform, Model3D, Vertex3D};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::math::{Mat4, Vec3};
+use crate::{game::Entity, math::Mat4};
 
 mod assets;
 mod camera;
 mod models;
+
+pub enum Asset {
+    Cube,
+    Ground,
+}
 
 pub struct State {
     window: Arc<Window>,
@@ -23,10 +28,11 @@ pub struct State {
     device: Device,
     queue: Queue,
     render_pipeline: RenderPipeline,
+    texture_layout: BindGroupLayout,
     pub camera: Camera,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
-    models: Vec<GpuModel>,
+    models: Vec<Model>,
     last_frame_time: Instant,
 }
 
@@ -172,26 +178,6 @@ impl State {
                 cache: None,
             });
 
-        // Load models
-        let mut glb_models: Vec<Model3D> = [
-            //models::load_glb("assets/BoxTextured.glb"),
-            load_glb("assets/cube.glb"),
-            load_glb("assets/ground.glb"),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        glb_models[0].translation = Vec3::y();
-        let mut models = Vec::new();
-        for model in glb_models {
-            models.push(GpuModel::new(
-                &device,
-                &queue,
-                &texture_layout,
-                &model,
-            ));
-        }
-
         println!("{:#?}", adapter.get_info());
 
         Self {
@@ -200,12 +186,130 @@ impl State {
             surface_config,
             device,
             queue,
+            texture_layout,
             render_pipeline,
             camera,
             camera_bind_group,
             camera_buffer,
-            models,
+            models: Vec::new(),
             last_frame_time: Instant::now(),
+        }
+    }
+
+    pub fn load_models(&mut self) {
+        [
+            load_glb("assets/BoxTextured.glb"),
+            load_glb("assets/cube.glb"),
+            load_glb("assets/ground.glb"),
+        ]
+        .into_iter()
+        .flatten()
+        .for_each(|model| self.models.push(self.load_model(&model)));
+    }
+    fn load_model(&self, model: &Model3D) -> Model {
+        let index = self.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            usage: BufferUsages::INDEX,
+            contents: bytemuck::cast_slice(&model.indices),
+        });
+        let vertex = self.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            usage: BufferUsages::VERTEX,
+            contents: bytemuck::cast_slice(&model.vertices),
+        });
+
+        let sampler = self.device.create_sampler(&SamplerDescriptor::default());
+
+        let material_uniform = MaterialUniform::from(&model.material);
+        let material_uniform_buffer =
+            self.device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                usage: BufferUsages::UNIFORM,
+                contents: bytes_of(&material_uniform),
+            });
+
+        let vertex_uniform =
+            self.device.create_buffer_init(&BufferInitDescriptor {
+                label: Some("Vertex Uniform"),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                contents: bytes_of(&Mat4::identity()),
+            });
+
+        let texture_view = if let Some(ref image) = model.material.image {
+            let image = image.to_rgba8();
+            let size = Extent3d {
+                width: image.width(),
+                height: image.height(),
+                depth_or_array_layers: 1,
+            };
+            let texture = self.device.create_texture(&TextureDescriptor {
+                label: None,
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Rgba8UnormSrgb,
+                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            self.queue.write_texture(
+                texture.as_image_copy(),
+                &image,
+                TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(image.width() * 4),
+                    rows_per_image: Some(image.height()),
+                },
+                size,
+            );
+
+            texture.create_view(&Default::default())
+        } else {
+            let texture = self.device.create_texture(&TextureDescriptor {
+                label: None,
+                size: Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Rgba8UnormSrgb,
+                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            texture.create_view(&Default::default())
+        };
+
+        let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Texture Bind Group"),
+            layout: &self.texture_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: vertex_uniform.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: material_uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::TextureView(&texture_view),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+        Model {
+            vertex,
+            index,
+            indices_len: model.indices.len() as u32,
+            bind_group,
+            vertex_uniform,
         }
     }
 
@@ -216,7 +320,7 @@ impl State {
         self.camera.set_aspect_ratio(&size);
     }
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self, entities: &Vec<Entity>) {
         let frame = self.surface.get_current_texture().unwrap();
         let view = &frame.texture.create_view(&Default::default());
 
@@ -251,7 +355,13 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
 
-            for model in &self.models {
+            for entity in entities {
+                let model = match entity.asset {
+                    Asset::Cube => &self.models[1],
+                    Asset::Ground => &self.models[2],
+                };
+                model.transform(&self.queue, entity.transform());
+
                 render_pass.set_bind_group(1, &model.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, model.vertex.slice(..));
                 render_pass.set_index_buffer(
@@ -299,125 +409,16 @@ async fn init_wgpu(
     (adapter, device, queue)
 }
 
-struct GpuModel {
+pub struct Model {
     vertex: Buffer,
     index: Buffer,
     indices_len: u32,
     bind_group: BindGroup,
+    vertex_uniform: Buffer,
 }
 
-impl GpuModel {
-    fn new(
-        device: &Device,
-        queue: &Queue,
-        texture_layout: &BindGroupLayout,
-        model: &Model3D,
-    ) -> GpuModel {
-        let index = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            usage: BufferUsages::INDEX,
-            contents: bytemuck::cast_slice(&model.indices),
-        });
-        let vertex = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            usage: BufferUsages::VERTEX,
-            contents: bytemuck::cast_slice(&model.vertices),
-        });
-
-        let sampler = device.create_sampler(&SamplerDescriptor::default());
-
-        let material_uniform = MaterialUniform::from(&model.material);
-        let material_uniform_buffer =
-            device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                usage: BufferUsages::UNIFORM,
-                contents: bytes_of(&material_uniform),
-            });
-
-        let model_matrix = Mat4::from_translation(model.translation)
-            * Mat4::from_scaling(Vec3::new(0.5, 0.5, 0.5));
-        let vertex_uniform = model_matrix;
-        let vertex_uniform_buffer =
-            device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                usage: BufferUsages::UNIFORM,
-                contents: bytes_of(&vertex_uniform),
-            });
-
-        let texture_view = if let Some(ref image) = model.material.image {
-            let image = image.to_rgba8();
-            let size = Extent3d {
-                width: image.width(),
-                height: image.height(),
-                depth_or_array_layers: 1,
-            };
-            let texture = device.create_texture(&TextureDescriptor {
-                label: None,
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
-                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            queue.write_texture(
-                texture.as_image_copy(),
-                &image,
-                TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(image.width() * 4),
-                    rows_per_image: Some(image.height()),
-                },
-                size,
-            );
-
-            texture.create_view(&Default::default())
-        } else {
-            let texture = device.create_texture(&TextureDescriptor {
-                label: None,
-                size: Extent3d {
-                    width: 1,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
-                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            texture.create_view(&Default::default())
-        };
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Texture Bind Group"),
-            layout: &texture_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: vertex_uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: material_uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::TextureView(&texture_view),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-        GpuModel {
-            vertex,
-            index,
-            indices_len: model.indices.len() as u32,
-            bind_group,
-        }
+impl Model {
+    fn transform(&self, queue: &Queue, matrix: Mat4) {
+        queue.write_buffer(&self.vertex_uniform, 0, bytes_of(&matrix));
     }
 }

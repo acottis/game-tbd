@@ -1,10 +1,9 @@
+use image::DynamicImage;
 use wgpu::{
     VertexAttribute, VertexBufferLayout, VertexStepMode, vertex_attr_array,
 };
 
-use crate::math::{Mat4, Vec3};
-
-use super::assets::Material;
+use crate::math::Vec3;
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
 #[repr(C)]
@@ -47,6 +46,42 @@ impl From<&Material> for MaterialUniform {
             roughness: value.roughness,
             has_texture: value.image.is_some() as _,
             _padding: Default::default(),
+        }
+    }
+}
+pub struct Material {
+    pub base_colour: [f32; 4],
+    pub metallic: f32,
+    pub roughness: f32,
+    pub image: Option<DynamicImage>,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            base_colour: [1.0, 1.0, 1.0, 1.0],
+            metallic: 0.0,
+            roughness: 1.0,
+            image: None,
+        }
+    }
+}
+
+pub struct Model3D {
+    pub vertices: Vec<Vertex3D>,
+    pub indices: Vec<u32>,
+    pub material: Material,
+}
+impl Model3D {
+    pub fn new(
+        vertices: Vec<Vertex3D>,
+        indices: Vec<u32>,
+        material: Material,
+    ) -> Self {
+        Self {
+            vertices,
+            indices,
+            material,
         }
     }
 }
