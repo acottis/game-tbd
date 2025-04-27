@@ -1,15 +1,17 @@
-use std::{f32::consts::PI, num::NonZeroU64, sync::Arc, time::Instant};
+use std::{num::NonZeroU64, sync::Arc, time::Instant};
 
+use assets::{Model3D, load_glb};
 use bytemuck::bytes_of;
-use models::{Material, Model3D};
+use camera::{Camera, CameraUniform};
+use models::{MaterialUniform, Vertex3D, Vertex3DUniform};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::math::{Mat3, Mat4, Vec3, Vec4};
-
+mod assets;
+mod camera;
 mod models;
 
 pub struct State {
@@ -42,19 +44,20 @@ impl State {
             .unwrap();
         surface.configure(&device, &surface_config);
 
-        // Camera stuff
         let camera = Camera::new(&window_size);
-
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytes_of(&camera.view_perspective_rh()),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
+
         let camera_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 label: Some("Camera Bind Group Layout"),
                 entries: &[BindGroupLayoutEntry {
                     binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    count: None,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -62,8 +65,6 @@ impl State {
                             size_of::<CameraUniform>() as u64,
                         ),
                     },
-                    visibility: ShaderStages::VERTEX,
-                    count: None,
                 }],
             });
         let camera_bind_group =
@@ -79,44 +80,59 @@ impl State {
         let shader = device
             .create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
 
+        let texture_layout_descriptor = BindGroupLayoutDescriptor {
+            label: Some("Texture Bind Group Layout"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(size_of::<
+                            Vertex3DUniform,
+                        >(
+                        )
+                            as u64),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(size_of::<
+                            MaterialUniform,
+                        >(
+                        )
+                            as u64),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float {
+                            filterable: true,
+                        },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        };
         let texture_layout =
-            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Texture Bind Group Layout"),
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(size_of::<
-                                MaterialUniform,
-                            >(
-                            )
-                                as u64),
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            sample_type: TextureSampleType::Float {
-                                filterable: true,
-                            },
-                            view_dimension: TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+            device.create_bind_group_layout(&texture_layout_descriptor);
 
         let pipeline_layout =
             device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -158,9 +174,9 @@ impl State {
 
         // Load models
         let glb_models: Vec<Model3D> = [
-            models::load_glb("assets/BoxTextured.glb"),
-            models::load_glb("assets/cube.glb"),
-            models::load_glb("assets/ground.glb"),
+            //models::load_glb("assets/BoxTextured.glb"),
+            load_glb("assets/cube.glb"),
+            load_glb("assets/ground.glb"),
         ]
         .into_iter()
         .flatten()
@@ -407,144 +423,5 @@ impl GpuModel {
             indices_len: model.indices.len() as u32,
             bind_group,
         }
-    }
-}
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
-#[repr(C)]
-struct Vertex3D {
-    vec3: Vec3,
-    uv: [f32; 2],
-}
-impl Vertex3D {
-    const ATTRIBUTES: [VertexAttribute; 2] =
-        vertex_attr_array![0 => Float32x3, 1 => Float32x2];
-
-    fn new(vec3: Vec3, uv: [f32; 2]) -> Self {
-        Self { vec3, uv }
-    }
-
-    const fn layout() -> VertexBufferLayout<'static> {
-        VertexBufferLayout {
-            array_stride: size_of::<Self>() as u64,
-            step_mode: VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBUTES,
-        }
-    }
-}
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
-#[repr(C)]
-struct MaterialUniform {
-    base_colour: [f32; 4],
-    metallic: f32,
-    roughness: f32,
-    has_texture: u32,
-    _padding: [u8; 4],
-}
-
-impl From<&Material> for MaterialUniform {
-    fn from(value: &Material) -> Self {
-        Self {
-            base_colour: value.base_colour,
-            metallic: value.metallic,
-            roughness: value.roughness,
-            has_texture: value.image.is_some() as _,
-            _padding: Default::default(),
-        }
-    }
-}
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
-#[repr(C)]
-struct CameraUniform {
-    view: Mat4,
-    projection: Mat4,
-}
-
-#[derive(Debug)]
-pub struct Camera {
-    /// Our position (eye)
-    position: Vec3,
-    /// The center of what we are looking at, rotations are relative to target
-    target: Vec3,
-    up: Vec3,
-    /// Field of view
-    fovy: f32,
-    aspect: f32,
-    near: f32,
-    far: f32,
-}
-
-impl Camera {
-    const fn new(window_size: &PhysicalSize<u32>) -> Self {
-        Self {
-            position: Vec3::new(0.5, 1.0, 2.0),
-            target: Vec3::new(0.0, 0.0, 0.0),
-            up: Vec3::new(0.0, 1.0, 0.0),
-            fovy: PI / 4.0,
-            aspect: window_size.width as f32 / window_size.height as f32,
-            near: 0.1,
-            far: 1000.0,
-        }
-    }
-    pub fn rotate_x(&mut self, theta: f32) {
-        self.position = Mat3::rotation_x(theta) * self.position;
-    }
-    pub fn rotate_y(&mut self, theta: f32) {
-        self.position = Mat3::rotation_y(theta) * self.position;
-    }
-    pub fn forward(&mut self, speed: f32) {
-        let forward = (self.target - self.position).normalise();
-
-        self.position += forward * speed;
-    }
-    /// + is right
-    /// - is left
-    pub fn strafe(&mut self, speed: f32) {
-        let forward = (self.target - self.position).normalise();
-        let right = forward.cross(&self.up).normalise();
-        let delta = right * speed;
-
-        self.position += delta;
-        self.target += delta;
-    }
-    fn view_rh(&self) -> Mat4 {
-        let forward = (self.target - self.position).normalise();
-        let right = forward.cross(&self.up).normalise();
-        let up = right.cross(&forward).normalise();
-
-        let projection_x = -right.dot(&self.position);
-        let projection_y = -up.dot(&self.position);
-        let projection_z = forward.dot(&self.position);
-
-        Mat4 {
-            x: Vec4::new(right.x, up.x, -forward.x, 0.0),
-            y: Vec4::new(right.y, up.y, -forward.y, 0.0),
-            z: Vec4::new(right.z, up.z, -forward.z, 0.0),
-            w: Vec4::new(projection_x, projection_y, projection_z, 1.0),
-        }
-    }
-    fn perspective_rh(&self) -> Mat4 {
-        let tan_half_fov = 1.0 / (self.fovy / 2.0).tan();
-        let range = self.far - self.near;
-        let depth = -(self.far + self.near) / range;
-        let project = -(2.0 * self.far * self.near) / range;
-        Mat4 {
-            x: Vec4::new(tan_half_fov / self.aspect, 0.0, 0.0, 0.0),
-            y: Vec4::new(0.0, tan_half_fov, 0.0, 0.0),
-            z: Vec4::new(0.0, 0.0, depth, -1.0),
-            w: Vec4::new(0.0, 0.0, project, 0.0),
-        }
-    }
-    fn view_perspective_rh(&self) -> CameraUniform {
-        CameraUniform {
-            view: self.view_rh(),
-            projection: self.perspective_rh(),
-        }
-    }
-
-    fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {
-        self.aspect = size.width as f32 / size.height as f32
     }
 }

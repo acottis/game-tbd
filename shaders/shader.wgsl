@@ -41,9 +41,15 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    var colour = material.base_colour;
     if material.has_texture == 1 {
-        return material.base_colour * textureSample(t_diffuse, s_diffuse, in.uv);
-    } else {
-        return material.base_colour;
+        colour *= textureSample(t_diffuse, s_diffuse, in.uv);
     }
+
+    var roughness_effect = mix(1.2, 0.8, material.roughness);
+    var metallic_effect = mix(0.9, 1.1, material.metallic);
+    var effect = roughness_effect * metallic_effect;
+    colour = vec4<f32>(colour.rgb * effect, colour.a);
+
+    return colour;
 }
