@@ -33,7 +33,6 @@ pub struct State {
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
     models: Vec<Model>,
-    last_frame_time: Instant,
 }
 
 impl State {
@@ -192,7 +191,6 @@ impl State {
             camera_bind_group,
             camera_buffer,
             models: Vec::new(),
-            last_frame_time: Instant::now(),
         }
     }
 
