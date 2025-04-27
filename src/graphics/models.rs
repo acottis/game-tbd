@@ -36,7 +36,7 @@ pub struct Vertex3DUniform {
 }
 
 impl Vertex3DUniform {
-    fn new(translation: Mat4) -> Self {
+    pub fn new(translation: Mat4) -> Self {
         Self { translation }
     }
 }

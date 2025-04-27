@@ -1,13 +1,12 @@
-struct Camera {
-	view: mat4x4<f32>,
-	projection: mat4x4<f32>,
-}
-
 struct Material {
     base_colour: vec4<f32>,
 	metallic: f32,
 	roughness: f32,
 	has_texture: u32,
+}
+
+struct Vertex3D {
+    translation: mat4x4<f32>,
 }
 
 struct VertexInput {
@@ -21,20 +20,22 @@ struct VertexOutput {
 }
 
 @group(0) @binding(0)
-var<uniform> camera: Camera;
+var<uniform> camera: mat4x4<f32>;
 
 @group(1) @binding(0)
-var<uniform> material: Material;
+var<uniform> vertex3D: Vertex3D;
 @group(1) @binding(1)
-var t_diffuse: texture_2d<f32>;
+var<uniform> material: Material;
 @group(1) @binding(2)
+var t_diffuse: texture_2d<f32>;
+@group(1) @binding(3)
 var s_diffuse: sampler;
 
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.position = camera.projection * camera.view * vec4<f32>(in.vertex, 1.0);
+    out.position = camera * vertex3D.translation * vec4<f32>(in.vertex, 1.0);
     out.uv = in.uv;
     return out;
 }

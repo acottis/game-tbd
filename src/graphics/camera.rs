@@ -4,13 +4,6 @@ use winit::dpi::PhysicalSize;
 
 use crate::math::{Mat3, Mat4, Vec3, Vec4};
 
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
-#[repr(C)]
-pub struct CameraUniform {
-    view: Mat4,
-    projection: Mat4,
-}
-
 #[derive(Debug)]
 pub struct Camera {
     /// Our position (eye)
@@ -86,11 +79,8 @@ impl Camera {
             w: Vec4::new(0.0, 0.0, project, 0.0),
         }
     }
-    pub fn view_perspective_rh(&self) -> CameraUniform {
-        CameraUniform {
-            view: self.view_rh(),
-            projection: self.perspective_rh(),
-        }
+    pub fn view_perspective_rh(&self) -> Mat4 {
+        self.view_rh() * self.perspective_rh()
     }
 
     pub fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {

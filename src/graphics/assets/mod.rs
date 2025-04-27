@@ -3,6 +3,8 @@ use std::path::Path;
 use gltf::{Document, Node, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
+use crate::math::Vec3;
+
 use super::models::Vertex3D;
 
 pub struct Material {
@@ -27,6 +29,7 @@ pub struct Model3D {
     pub vertices: Vec<Vertex3D>,
     pub indices: Vec<u32>,
     pub material: Material,
+    pub translation: Vec3,
 }
 impl Model3D {
     fn new(
@@ -38,6 +41,7 @@ impl Model3D {
             vertices,
             indices,
             material,
+            translation: Vec3::new(0.0, 0.0, 0.0),
         }
     }
 }

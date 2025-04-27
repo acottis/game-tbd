@@ -34,7 +34,7 @@ impl Mat3 {
     }
 }
 
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct Mat4 {
     pub x: Vec4,
@@ -52,18 +52,60 @@ impl Mat4 {
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
-    pub fn transpose(&self) -> Self {
-        let m = self;
+    pub fn from_translation(translation: Vec3) -> Self {
         Self {
-            x: Vec4::new(m.x.x, m.y.x, m.z.x, m.w.x),
-            y: Vec4::new(m.x.y, m.y.y, m.z.y, m.w.y),
-            z: Vec4::new(m.x.z, m.y.z, m.z.z, m.w.z),
-            w: Vec4::new(m.x.w, m.y.w, m.z.w, m.w.w),
+            x: Vec4::new(1.0, 0.0, 0.0, 0.0),
+            y: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            z: Vec4::new(0.0, 0.0, 1.0, 0.0),
+            w: Vec4::new(translation.x, translation.y, translation.z, 1.0),
+        }
+    }
+    pub fn transpose(self) -> Mat4 {
+        Mat4 {
+            x: Vec4::new(self.x.x, self.y.x, self.z.x, self.w.x),
+            y: Vec4::new(self.x.y, self.y.y, self.z.y, self.w.y),
+            z: Vec4::new(self.x.z, self.y.z, self.z.z, self.w.z),
+            w: Vec4::new(self.x.w, self.y.w, self.z.w, self.w.w),
         }
     }
 }
 
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Default, Debug)]
+impl std::ops::Mul<Mat4> for Mat4 {
+    type Output = Self;
+
+    fn mul(self, rhs: Mat4) -> Self::Output {
+        Self {
+            x: Vec4 {
+                x: self.x.dot(rhs.x),
+                y: self.x.dot(rhs.y),
+                z: self.x.dot(rhs.z),
+                w: self.x.dot(rhs.w),
+            },
+            y: Vec4 {
+                x: self.y.dot(rhs.x),
+                y: self.y.dot(rhs.y),
+                z: self.y.dot(rhs.z),
+                w: self.y.dot(rhs.w),
+            },
+            z: Vec4 {
+                x: self.z.dot(rhs.x),
+                y: self.z.dot(rhs.y),
+                z: self.z.dot(rhs.z),
+                w: self.z.dot(rhs.w),
+            },
+            w: Vec4 {
+                x: self.w.dot(rhs.x),
+                y: self.w.dot(rhs.y),
+                z: self.w.dot(rhs.z),
+                w: self.w.dot(rhs.w),
+            },
+        }
+    }
+}
+
+#[derive(
+    bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Default, Debug, PartialEq,
+)]
 #[repr(C)]
 pub struct Vec4 {
     pub x: f32,
@@ -75,6 +117,12 @@ pub struct Vec4 {
 impl Vec4 {
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
+    }
+    pub const fn dot(&self, rhs: Self) -> f32 {
+        (self.x * rhs.x)
+            + (self.y * rhs.y)
+            + (self.z * rhs.z)
+            + (self.w * rhs.w)
     }
 }
 
@@ -211,5 +259,93 @@ impl core::ops::AddAssign for Vec3 {
         self.x += rhs.x;
         self.y += rhs.y;
         self.z += rhs.z;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_matrix_multiplication() {
+        // Define two sample matrices
+        let mat_a = Mat4 {
+            x: Vec4 {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0,
+                w: 4.0,
+            },
+            y: Vec4 {
+                x: 5.0,
+                y: 6.0,
+                z: 7.0,
+                w: 8.0,
+            },
+            z: Vec4 {
+                x: 9.0,
+                y: 10.0,
+                z: 11.0,
+                w: 12.0,
+            },
+            w: Vec4 {
+                x: 13.0,
+                y: 14.0,
+                z: 15.0,
+                w: 16.0,
+            },
+        };
+
+        let mat_b = Mat4::identity();
+
+        // Perform matrix multiplication
+        let result = mat_a * mat_b;
+
+        // Define expected result matrix
+        let expected = Mat4 {
+            x: Vec4 {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0,
+                w: 4.0,
+            },
+            y: Vec4 {
+                x: 5.0,
+                y: 6.0,
+                z: 7.0,
+                w: 8.0,
+            },
+            z: Vec4 {
+                x: 9.0,
+                y: 10.0,
+                z: 11.0,
+                w: 12.0,
+            },
+            w: Vec4 {
+                x: 13.0,
+                y: 14.0,
+                z: 15.0,
+                w: 16.0,
+            },
+        };
+
+        // Assert that the result of multiplication is correct
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_eq() {
+        let a = Mat4::identity();
+        let b = Mat4::identity();
+
+        assert_eq!(a, b);
+    }
+    #[test]
+    fn test_ne() {
+        let mut a = Mat4::identity();
+        let b = Mat4::identity();
+        a.x.w = 0.5;
+
+        assert_ne!(a, b);
     }
 }
