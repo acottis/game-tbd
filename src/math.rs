@@ -1,3 +1,5 @@
+use bytemuck::{Pod, Zeroable};
+
 #[derive(Debug)]
 pub struct Mat3 {
     pub x: Vec3,
@@ -34,7 +36,7 @@ impl Mat3 {
     }
 }
 
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug, PartialEq)]
+#[derive(Pod, Zeroable, Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct Mat4 {
     pub x: Vec4,
@@ -58,6 +60,14 @@ impl Mat4 {
             y: Vec4::new(0.0, 1.0, 0.0, 0.0),
             z: Vec4::new(0.0, 0.0, 1.0, 0.0),
             w: Vec4::new(translation.x, translation.y, translation.z, 1.0),
+        }
+    }
+    pub fn from_scaling(scale: Vec3) -> Self {
+        Self {
+            x: Vec4::new(scale.x, 0.0, 0.0, 0.0),
+            y: Vec4::new(0.0, scale.y, 0.0, 0.0),
+            z: Vec4::new(0.0, 0.0, scale.z, 0.0),
+            w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
     pub fn transpose(self) -> Mat4 {
@@ -104,9 +114,7 @@ impl std::ops::Mul<Mat4> for Mat4 {
     }
 }
 
-#[derive(
-    bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Default, Debug, PartialEq,
-)]
+#[derive(Pod, Zeroable, Copy, Clone, Default, Debug, PartialEq)]
 #[repr(C)]
 pub struct Vec4 {
     pub x: f32,
@@ -128,7 +136,7 @@ impl Vec4 {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,

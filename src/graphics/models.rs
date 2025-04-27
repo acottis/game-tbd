@@ -31,18 +31,6 @@ impl Vertex3D {
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
 #[repr(C)]
-pub struct Vertex3DUniform {
-    translation: Mat4,
-}
-
-impl Vertex3DUniform {
-    pub fn new(translation: Mat4) -> Self {
-        Self { translation }
-    }
-}
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
-#[repr(C)]
 pub struct MaterialUniform {
     base_colour: [f32; 4],
     metallic: f32,

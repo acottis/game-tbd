@@ -3,7 +3,7 @@ use std::{num::NonZeroU64, sync::Arc, time::Instant};
 use assets::{Model3D, load_glb};
 use bytemuck::bytes_of;
 use camera::Camera;
-use models::{MaterialUniform, Vertex3D, Vertex3DUniform};
+use models::{MaterialUniform, Vertex3D};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
@@ -91,11 +91,9 @@ impl State {
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(size_of::<
-                            Vertex3DUniform,
-                        >(
-                        )
-                            as u64),
+                        min_binding_size: NonZeroU64::new(
+                            size_of::<Mat4>() as u64
+                        ),
                     },
                     count: None,
                 },
@@ -336,8 +334,9 @@ impl GpuModel {
                 contents: bytes_of(&material_uniform),
             });
 
-        let vertex_uniform =
-            Vertex3DUniform::new(Mat4::from_translation(model.translation));
+        let model_matrix = Mat4::from_translation(model.translation)
+            * Mat4::from_scaling(Vec3::new(0.5, 0.5, 0.5));
+        let vertex_uniform = model_matrix;
         let vertex_uniform_buffer =
             device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
