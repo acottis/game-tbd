@@ -145,10 +145,8 @@ mod tests {
 
     #[test]
     fn foo() {
-        let models = [
-            load_glb("assets/BoxTextured.glb"),
-            load_glb("assets/cube.glb"),
-            load_glb("assets/ground.glb"),
-        ];
+        load_glb("assets/BoxTextured.glb");
+        load_glb("assets/cube.glb");
+        load_glb("assets/ground.glb");
     }
 }

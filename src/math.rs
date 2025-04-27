@@ -74,30 +74,31 @@ impl std::ops::Mul<Mat4> for Mat4 {
     type Output = Self;
 
     fn mul(self, rhs: Mat4) -> Self::Output {
+        let rhs = rhs.transpose();
         Self {
             x: Vec4 {
-                x: self.x.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
-                y: self.x.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
-                z: self.x.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
-                w: self.x.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
+                x: self.x.dot(rhs.x),
+                y: self.x.dot(rhs.y),
+                z: self.x.dot(rhs.z),
+                w: self.x.dot(rhs.w),
             },
             y: Vec4 {
-                x: self.y.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
-                y: self.y.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
-                z: self.y.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
-                w: self.y.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
+                x: self.y.dot(rhs.x),
+                y: self.y.dot(rhs.y),
+                z: self.y.dot(rhs.z),
+                w: self.y.dot(rhs.w),
             },
             z: Vec4 {
-                x: self.z.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
-                y: self.z.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
-                z: self.z.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
-                w: self.z.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
+                x: self.z.dot(rhs.x),
+                y: self.z.dot(rhs.y),
+                z: self.z.dot(rhs.z),
+                w: self.z.dot(rhs.w),
             },
             w: Vec4 {
-                x: self.w.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
-                y: self.w.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
-                z: self.w.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
-                w: self.w.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
+                x: self.w.dot(rhs.x),
+                y: self.w.dot(rhs.y),
+                z: self.w.dot(rhs.z),
+                w: self.w.dot(rhs.w),
             },
         }
     }
@@ -267,33 +268,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_matrix_multiplication() {
+    fn test_mat4_identity_multiplication() {
         // Define two sample matrices
         let mat_a = Mat4 {
-            x: Vec4 {
-                x: 1.0,
-                y: 2.0,
-                z: 3.0,
-                w: 4.0,
-            },
-            y: Vec4 {
-                x: 5.0,
-                y: 6.0,
-                z: 7.0,
-                w: 8.0,
-            },
-            z: Vec4 {
-                x: 9.0,
-                y: 10.0,
-                z: 11.0,
-                w: 12.0,
-            },
-            w: Vec4 {
-                x: 13.0,
-                y: 14.0,
-                z: 15.0,
-                w: 16.0,
-            },
+            x: Vec4::new(1.0, 2.0, 3.0, 4.0),
+            y: Vec4::new(5.0, 6.0, 7.0, 8.0),
+            z: Vec4::new(9.0, 10.0, 11.0, 12.0),
+            w: Vec4::new(13.0, 14.0, 15.0, 16.0),
         };
 
         let mat_b = Mat4::identity();
@@ -301,32 +282,11 @@ mod tests {
         // Perform matrix multiplication
         let result = mat_a * mat_b;
 
-        // Define expected result matrix
         let expected = Mat4 {
-            x: Vec4 {
-                x: 1.0,
-                y: 2.0,
-                z: 3.0,
-                w: 4.0,
-            },
-            y: Vec4 {
-                x: 5.0,
-                y: 6.0,
-                z: 7.0,
-                w: 8.0,
-            },
-            z: Vec4 {
-                x: 9.0,
-                y: 10.0,
-                z: 11.0,
-                w: 12.0,
-            },
-            w: Vec4 {
-                x: 13.0,
-                y: 14.0,
-                z: 15.0,
-                w: 16.0,
-            },
+            x: Vec4::new(1.0, 2.0, 3.0, 4.0),
+            y: Vec4::new(5.0, 6.0, 7.0, 8.0),
+            z: Vec4::new(9.0, 10.0, 11.0, 12.0),
+            w: Vec4::new(13.0, 14.0, 15.0, 16.0),
         };
 
         // Assert that the result of multiplication is correct
@@ -347,5 +307,33 @@ mod tests {
         a.x.w = 0.5;
 
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_row_major_matrix_multiplication() {
+        let mat_a = Mat4 {
+            x: Vec4::new(1.0, 2.0, 3.0, 4.0),
+            y: Vec4::new(5.0, 6.0, 7.0, 8.0),
+            z: Vec4::new(9.0, 10.0, 11.0, 12.0),
+            w: Vec4::new(13.0, 14.0, 15.0, 16.0),
+        };
+
+        let mat_b = Mat4 {
+            x: Vec4::new(1.0, 0.0, 0.0, 1.0),
+            y: Vec4::new(0.0, 1.0, 0.0, 0.0),
+            z: Vec4::new(0.0, 0.0, 1.0, 0.0),
+            w: Vec4::new(0.0, 0.0, 0.0, 1.0),
+        };
+
+        let result = mat_a * mat_b;
+
+        let expected = Mat4 {
+            x: Vec4::new(1.0, 2.0, 3.0, 5.0),
+            y: Vec4::new(5.0, 6.0, 7.0, 13.0),
+            z: Vec4::new(9.0, 10.0, 11.0, 21.0),
+            w: Vec4::new(13.0, 14.0, 15.0, 29.0),
+        };
+
+        assert_eq!(result, expected);
     }
 }
