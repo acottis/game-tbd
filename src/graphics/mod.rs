@@ -49,7 +49,7 @@ impl State {
         let camera = Camera::new(&window_size);
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: bytes_of(&camera.view_perspective_rh().transpose()),
+            contents: bytes_of(&camera.view_perspective_rh()),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 

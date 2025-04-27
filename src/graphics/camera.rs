@@ -80,6 +80,7 @@ impl Camera {
         }
     }
     pub fn view_perspective_rh(&self) -> Mat4 {
+        //self.perspective_rh() * self.view_rh()
         self.view_rh() * self.perspective_rh()
     }
 

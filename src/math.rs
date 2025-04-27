@@ -76,28 +76,28 @@ impl std::ops::Mul<Mat4> for Mat4 {
     fn mul(self, rhs: Mat4) -> Self::Output {
         Self {
             x: Vec4 {
-                x: self.x.dot(rhs.x),
-                y: self.x.dot(rhs.y),
-                z: self.x.dot(rhs.z),
-                w: self.x.dot(rhs.w),
+                x: self.x.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
+                y: self.x.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
+                z: self.x.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
+                w: self.x.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
             },
             y: Vec4 {
-                x: self.y.dot(rhs.x),
-                y: self.y.dot(rhs.y),
-                z: self.y.dot(rhs.z),
-                w: self.y.dot(rhs.w),
+                x: self.y.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
+                y: self.y.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
+                z: self.y.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
+                w: self.y.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
             },
             z: Vec4 {
-                x: self.z.dot(rhs.x),
-                y: self.z.dot(rhs.y),
-                z: self.z.dot(rhs.z),
-                w: self.z.dot(rhs.w),
+                x: self.z.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
+                y: self.z.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
+                z: self.z.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
+                w: self.z.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
             },
             w: Vec4 {
-                x: self.w.dot(rhs.x),
-                y: self.w.dot(rhs.y),
-                z: self.w.dot(rhs.z),
-                w: self.w.dot(rhs.w),
+                x: self.w.dot(Vec4::new(rhs.x.x, rhs.y.x, rhs.z.x, rhs.w.x)),
+                y: self.w.dot(Vec4::new(rhs.x.y, rhs.y.y, rhs.z.y, rhs.w.y)),
+                z: self.w.dot(Vec4::new(rhs.x.z, rhs.y.z, rhs.z.z, rhs.w.z)),
+                w: self.w.dot(Vec4::new(rhs.x.w, rhs.y.w, rhs.z.w, rhs.w.w)),
             },
         }
     }
