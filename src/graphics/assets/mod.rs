@@ -3,7 +3,93 @@ use std::path::Path;
 use gltf::{Document, Node, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
-use super::models::{Material, Model3D, Vertex3D};
+use crate::math::Vec3;
+
+use wgpu::{
+    VertexAttribute, VertexBufferLayout, VertexStepMode, vertex_attr_array,
+};
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
+#[repr(C)]
+pub struct Vertex {
+    vec3: Vec3,
+    normal: Vec3,
+    uv: [f32; 2],
+}
+impl Vertex {
+    const ATTRIBUTES: [VertexAttribute; 3] =
+        vertex_attr_array![0 => Float32x3, 1 => Float32x3 ,2 => Float32x2];
+
+    pub fn new(vec3: Vec3, normal: Vec3, uv: [f32; 2]) -> Self {
+        Self { vec3, normal, uv }
+    }
+
+    pub const fn layout() -> VertexBufferLayout<'static> {
+        VertexBufferLayout {
+            array_stride: size_of::<Self>() as u64,
+            step_mode: VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBUTES,
+        }
+    }
+}
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
+#[repr(C)]
+pub struct MaterialUniform {
+    base_colour: [f32; 4],
+    metallic: f32,
+    roughness: f32,
+    has_texture: u32,
+    _padding: [u8; 4],
+}
+
+impl From<&Material> for MaterialUniform {
+    fn from(value: &Material) -> Self {
+        Self {
+            base_colour: value.base_colour,
+            metallic: value.metallic,
+            roughness: value.roughness,
+            has_texture: value.image.is_some() as _,
+            _padding: Default::default(),
+        }
+    }
+}
+pub struct Material {
+    pub base_colour: [f32; 4],
+    pub metallic: f32,
+    pub roughness: f32,
+    pub image: Option<DynamicImage>,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            base_colour: [1.0, 1.0, 1.0, 1.0],
+            metallic: 0.0,
+            roughness: 1.0,
+            image: None,
+        }
+    }
+}
+
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub material: Material,
+}
+impl Mesh {
+    pub fn new(
+        vertices: Vec<Vertex>,
+        indices: Vec<u32>,
+        material: Material,
+    ) -> Self {
+        Self {
+            vertices,
+            indices,
+            material,
+        }
+    }
+}
 
 fn load_texture(
     info: Option<Info>,
@@ -35,7 +121,7 @@ fn process_node(
     node: Node,
     document: &Document,
     buffer: &Vec<Data>,
-    models: &mut Vec<Model3D>,
+    models: &mut Vec<Mesh>,
 ) {
     for child in node.children() {
         process_node(child, document, buffer, models);
@@ -51,9 +137,22 @@ fn process_node(
             let vertices = reader.read_positions().unwrap();
             let indices = reader.read_indices().unwrap().into_u32();
             let uvs = reader.read_tex_coords(0).unwrap().into_f32();
-
-            for (vertex, uv) in vertices.zip(uvs) {
-                vertex_buffer.push(Vertex3D::new(vertex.into(), uv))
+            if let Some(normals) = reader.read_normals() {
+                for ((vertex, uv), normal) in vertices.zip(uvs).zip(normals) {
+                    vertex_buffer.push(Vertex::new(
+                        vertex.into(),
+                        normal.into(),
+                        uv,
+                    ));
+                }
+            } else {
+                for (vertex, uv) in vertices.zip(uvs) {
+                    vertex_buffer.push(Vertex::new(
+                        vertex.into(),
+                        Vec3::y(),
+                        uv,
+                    ))
+                }
             }
 
             for index in indices {
@@ -79,12 +178,12 @@ fn process_node(
                 }
                 None => Material::default(),
             };
-            models.push(Model3D::new(vertex_buffer, index_buffer, material));
+            models.push(Mesh::new(vertex_buffer, index_buffer, material));
         }
     }
 }
 
-pub fn load_glb(path: impl AsRef<Path>) -> Vec<Model3D> {
+pub fn load_glb(path: impl AsRef<Path>) -> Vec<Mesh> {
     let (document, buffer, _image) = gltf::import(&path).unwrap();
 
     let mut models = Vec::new();

@@ -1,20 +1,21 @@
-use std::{num::NonZeroU64, sync::Arc, time::Instant};
+use std::{num::NonZeroU64, sync::Arc};
 
-use assets::load_glb;
-use bytemuck::bytes_of;
+use assets::{MaterialUniform, Mesh, Vertex, load_glb};
+use bytemuck::{Pod, Zeroable, bytes_of};
 use camera::Camera;
-use models::{MaterialUniform, Model3D, Vertex3D};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::{game::Entity, math::Mat4};
+use crate::{
+    game::Entity,
+    math::{Mat4, Vec3},
+};
 
 mod assets;
 mod camera;
-mod models;
 
 pub enum Asset {
     Cube,
@@ -32,6 +33,7 @@ pub struct State {
     pub camera: Camera,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
+    light_bind_group: BindGroup,
     models: Vec<Model>,
 }
 
@@ -69,7 +71,7 @@ impl State {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: NonZeroU64::new(
-                            size_of::<Mat4>() as u64
+                            size_of::<Mat4>() as _
                         ),
                     },
                 }],
@@ -83,6 +85,38 @@ impl State {
                     resource: camera_buffer.as_entire_binding(),
                 }],
             });
+
+        let light =
+            Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 0.0), 0.5);
+        let light_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Light"),
+            contents: bytes_of(&light),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+        let light_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("Light"),
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    count: None,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(
+                            size_of::<Light>() as _
+                        ),
+                    },
+                }],
+            });
+        let light_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Light"),
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: light_buffer.as_entire_binding(),
+            }],
+            layout: &light_layout,
+        });
 
         let shader = device
             .create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
@@ -142,7 +176,11 @@ impl State {
         let pipeline_layout =
             device.create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: None,
-                bind_group_layouts: &[&camera_layout, &texture_layout],
+                bind_group_layouts: &[
+                    &camera_layout,
+                    &light_layout,
+                    &texture_layout,
+                ],
                 push_constant_ranges: &[],
             });
 
@@ -154,7 +192,7 @@ impl State {
                     module: &shader,
                     entry_point: None,
                     compilation_options: Default::default(),
-                    buffers: &[Vertex3D::layout()],
+                    buffers: &[Vertex::layout()],
                 },
                 fragment: Some(FragmentState {
                     module: &shader,
@@ -190,6 +228,7 @@ impl State {
             camera,
             camera_bind_group,
             camera_buffer,
+            light_bind_group,
             models: Vec::new(),
         }
     }
@@ -204,7 +243,7 @@ impl State {
         .flatten()
         .for_each(|model| self.models.push(self.load_model(&model)));
     }
-    fn load_model(&self, model: &Model3D) -> Model {
+    fn load_model(&self, model: &Mesh) -> Model {
         let index = self.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             usage: BufferUsages::INDEX,
@@ -352,6 +391,7 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in entities {
                 let model = match entity.asset {
@@ -360,7 +400,7 @@ impl State {
                 };
                 model.transform(&self.queue, entity.transform());
 
-                render_pass.set_bind_group(1, &model.bind_group, &[]);
+                render_pass.set_bind_group(2, &model.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, model.vertex.slice(..));
                 render_pass.set_index_buffer(
                     model.index.slice(..),
@@ -412,5 +452,25 @@ pub struct Model {
 impl Model {
     fn transform(&self, queue: &Queue, matrix: Mat4) {
         queue.write_buffer(&self.vertex_uniform, 0, bytes_of(&matrix));
+    }
+}
+
+#[derive(Zeroable, Pod, Copy, Clone)]
+#[repr(C)]
+pub struct Light {
+    position: Vec3,
+    _padding: [u8; 4],
+    color: Vec3,
+    intensity: f32,
+}
+
+impl Light {
+    fn new(position: Vec3, color: Vec3, intensity: f32) -> Self {
+        Light {
+            position,
+            color,
+            intensity,
+            _padding: Default::default(),
+        }
     }
 }
