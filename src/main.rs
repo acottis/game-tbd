@@ -36,6 +36,7 @@ impl App {
     fn init(&mut self, window: Window) {
         let mut state = State::new(window);
         state.load_models();
+        self.game.load(&state);
         self.state = Some(state)
     }
 

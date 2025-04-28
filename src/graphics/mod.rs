@@ -1,4 +1,4 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::{num::NonZeroU64, rc::Rc, sync::Arc};
 
 use assets::{MaterialUniform, Mesh, Vertex, load_glb};
 use bytemuck::{Pod, Zeroable, bytes_of};
@@ -17,24 +17,19 @@ use crate::{
 mod assets;
 mod camera;
 
-pub enum Asset {
-    Cube,
-    Ground,
-}
-
 pub struct State {
     pub window: Arc<Window>,
+    pub camera: Camera,
+    pub meshes: Vec<Rc<MeshInstance>>,
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
     device: Device,
     queue: Queue,
     render_pipeline: RenderPipeline,
     texture_layout: BindGroupLayout,
-    pub camera: Camera,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
     light_bind_group: BindGroup,
-    models: Vec<Model>,
 }
 
 impl State {
@@ -229,7 +224,7 @@ impl State {
             camera_bind_group,
             camera_buffer,
             light_bind_group,
-            models: Vec::new(),
+            meshes: Vec::new(),
         }
     }
 
@@ -241,9 +236,9 @@ impl State {
         ]
         .into_iter()
         .flatten()
-        .for_each(|model| self.models.push(self.load_model(&model)));
+        .for_each(|model| self.meshes.push(Rc::new(self.load_model(&model))));
     }
-    fn load_model(&self, model: &Mesh) -> Model {
+    fn load_model(&self, model: &Mesh) -> MeshInstance {
         let index = self.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             usage: BufferUsages::INDEX,
@@ -341,7 +336,7 @@ impl State {
                 },
             ],
         });
-        Model {
+        MeshInstance {
             vertex,
             index,
             indices_len: model.indices.len() as u32,
@@ -394,19 +389,15 @@ impl State {
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in entities {
-                let model = match entity.asset {
-                    Asset::Cube => &self.models[1],
-                    Asset::Ground => &self.models[2],
-                };
-                model.transform(&self.queue, entity.transform());
+                entity.mesh.transform(&self.queue, entity.transform());
 
-                render_pass.set_bind_group(2, &model.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, model.vertex.slice(..));
+                render_pass.set_bind_group(2, &entity.mesh.bind_group, &[]);
+                render_pass.set_vertex_buffer(0, entity.mesh.vertex.slice(..));
                 render_pass.set_index_buffer(
-                    model.index.slice(..),
+                    entity.mesh.index.slice(..),
                     IndexFormat::Uint32,
                 );
-                render_pass.draw_indexed(0..model.indices_len, 0, 0..1);
+                render_pass.draw_indexed(0..entity.mesh.indices_len, 0, 0..1);
             }
         }
 
@@ -441,7 +432,7 @@ async fn init_wgpu(
     (adapter, device, queue)
 }
 
-pub struct Model {
+pub struct MeshInstance {
     vertex: Buffer,
     index: Buffer,
     indices_len: u32,
@@ -449,7 +440,7 @@ pub struct Model {
     vertex_uniform: Buffer,
 }
 
-impl Model {
+impl MeshInstance {
     fn transform(&self, queue: &Queue, matrix: Mat4) {
         queue.write_buffer(&self.vertex_uniform, 0, bytes_of(&matrix));
     }

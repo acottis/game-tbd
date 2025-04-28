@@ -1,4 +1,6 @@
-use crate::graphics::Asset;
+use std::rc::Rc;
+
+use crate::graphics::{MeshInstance, State};
 use crate::math::{Mat4, Vec3};
 use crate::physics::GRAVITY;
 
@@ -6,16 +8,16 @@ pub struct Entity {
     position: Vec3,
     scale: Vec3,
     physics: bool,
-    pub asset: Asset,
+    pub mesh: Rc<MeshInstance>,
 }
 
 impl Entity {
-    pub fn new(coords: Vec3, asset: Asset, physics: bool) -> Self {
+    pub fn new(coords: Vec3, mesh: Rc<MeshInstance>, physics: bool) -> Self {
         Self {
             position: coords,
             scale: Vec3::xyz(1.0),
-            asset,
             physics,
+            mesh,
         }
     }
 
@@ -38,12 +40,24 @@ pub struct Game {
 }
 impl Game {
     pub fn new() -> Self {
-        let mut entities = Vec::new();
-        let mut cube = Entity::new(Vec3::new(0.0, 2.0, 0.0), Asset::Cube, true);
+        Self {
+            entities: Vec::new(),
+        }
+    }
+
+    pub fn load(&mut self, state: &State) {
+        let mut cube = Entity::new(
+            Vec3::new(0.0, 2.0, 0.0),
+            state.meshes[1].clone(),
+            true,
+        );
         cube.scale = Vec3::xyz(0.3);
-        entities.push(Entity::new(Vec3::zeroes(), Asset::Ground, false));
-        entities.push(cube);
-        Self { entities }
+        self.entities.push(Entity::new(
+            Vec3::zeroes(),
+            state.meshes[2].clone(),
+            false,
+        ));
+        self.entities.push(cube);
     }
 
     pub fn update(&mut self, delta_time: f32) {
