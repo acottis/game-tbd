@@ -14,10 +14,10 @@ mod game;
 mod graphics;
 mod math;
 mod physics;
-use graphics::Graphics;
+use graphics::State;
 
 struct App {
-    state: Option<Graphics>,
+    state: Option<State>,
     game: Game,
     last_frame_time: Instant,
     delta_time: f32,
@@ -34,9 +34,11 @@ impl App {
     }
 
     fn init(&mut self, window: Window) {
-        let mut state = Graphics::new(window);
+        let mut state = State::new(window);
+
         let meshes = graphics::load_assets();
         state.gpu.load_meshes(meshes);
+
         self.game.load(&state);
         self.state = Some(state)
     }
@@ -53,6 +55,7 @@ impl App {
         }
         self.state.as_mut().unwrap().resize(size);
     }
+
     fn handle_input(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
         match event.physical_key {
             PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),

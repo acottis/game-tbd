@@ -16,13 +16,13 @@ pub use gpu::MeshInstance;
 pub use gpu::Vertex;
 pub use light::Light;
 
-pub struct Graphics {
+pub struct State {
     pub window: Arc<Window>,
     pub camera: Camera,
     pub gpu: Gpu,
 }
 
-impl Graphics {
+impl State {
     pub fn new(window: Window) -> Self {
         let window = Arc::new(window);
         let window_size = window.inner_size();
@@ -73,7 +73,7 @@ pub fn load_assets() -> impl Iterator<Item = assets::Mesh> {
     .flatten()
 }
 
-pub enum MeshInstanceId {
+pub enum MeshId {
     Ground,
     Cube,
     CubeGltf,

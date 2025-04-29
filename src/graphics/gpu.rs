@@ -11,7 +11,7 @@ use crate::{
     math::{Mat4, Vec3},
 };
 
-use super::{Camera, Light, MeshInstanceId, assets};
+use super::{Camera, Light, MeshId, assets};
 
 pub struct Gpu {
     meshes: Vec<Rc<Mesh>>,
@@ -228,7 +228,7 @@ impl Gpu {
         }
     }
 
-    pub fn mesh_instance(&self, mesh: MeshInstanceId) -> MeshInstance {
+    pub fn mesh_instance(&self, mesh: MeshId) -> MeshInstance {
         let transform = self.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Transform"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
@@ -251,11 +251,11 @@ impl Gpu {
         }
     }
 
-    fn mesh_from_id(&self, id: MeshInstanceId) -> Rc<Mesh> {
+    fn mesh_from_id(&self, id: MeshId) -> Rc<Mesh> {
         match id {
-            MeshInstanceId::Ground => self.meshes[2].clone(),
-            MeshInstanceId::Cube => self.meshes[1].clone(),
-            MeshInstanceId::CubeGltf => self.meshes[0].clone(),
+            MeshId::Ground => self.meshes[2].clone(),
+            MeshId::Cube => self.meshes[1].clone(),
+            MeshId::CubeGltf => self.meshes[0].clone(),
         }
     }
 

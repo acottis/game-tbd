@@ -1,4 +1,4 @@
-use crate::graphics::{Graphics, MeshInstance, MeshInstanceId};
+use crate::graphics::{MeshId, MeshInstance, State};
 use crate::math::{Mat4, Vec3};
 use crate::physics::GRAVITY;
 
@@ -43,16 +43,19 @@ impl Game {
         }
     }
 
-    pub fn load(&mut self, state: &Graphics) {
-        let ground_mesh = state.gpu.mesh_instance(MeshInstanceId::Ground);
-        let cube_mesh1 = state.gpu.mesh_instance(MeshInstanceId::Cube);
-        let cube_mesh2 = state.gpu.mesh_instance(MeshInstanceId::Cube);
-        let ground = Entity::new(Vec3::zeroes(), ground_mesh, false);
+    pub fn load(&mut self, state: &State) {
+        let ground_mesh = state.gpu.mesh_instance(MeshId::Ground);
+        let cube_mesh1 = state.gpu.mesh_instance(MeshId::Cube);
+        let cube_mesh2 = state.gpu.mesh_instance(MeshId::Cube);
+
+        let mut ground = Entity::new(Vec3::zeroes(), ground_mesh, false);
+        ground.scale = Vec3::xyz(2.0);
         let mut cube1 =
             Entity::new(Vec3::new(-1.0, 3.0, 0.0), cube_mesh1, true);
         cube1.scale = Vec3::xyz(0.3);
         let mut cube2 = Entity::new(Vec3::new(1.0, 3.0, 0.0), cube_mesh2, true);
         cube2.scale = Vec3::xyz(0.3);
+
         self.entities.push(ground);
         self.entities.push(cube2);
         self.entities.push(cube1);
