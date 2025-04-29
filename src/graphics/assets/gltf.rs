@@ -3,8 +3,8 @@ use std::path::Path;
 use gltf::{Document, Node, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
-use crate::math::Vec3;
-use super::{Material, Mesh, Vertex};
+use super::{Material, Mesh};
+use crate::{graphics::Vertex, math::Vec3};
 
 fn load_texture(
     info: Option<Info>,

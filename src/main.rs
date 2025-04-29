@@ -35,7 +35,8 @@ impl App {
 
     fn init(&mut self, window: Window) {
         let mut state = State::new(window);
-        state.load_models();
+        let meshes = graphics::load_assets();
+        state.gpu.load_meshes(meshes);
         self.game.load(&state);
         self.state = Some(state)
     }

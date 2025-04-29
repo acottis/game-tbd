@@ -1,56 +1,19 @@
 mod gltf;
 
 use image::DynamicImage;
-use wgpu::{
-    VertexAttribute, VertexBufferLayout, VertexStepMode, vertex_attr_array,
-};
 
-use crate::math::Vec3;
 pub use gltf::load_glb;
 
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
-#[repr(C)]
-pub struct Vertex {
-    vec3: Vec3,
-    normal: Vec3,
-    uv: [f32; 2],
-}
-impl Vertex {
-    const ATTRIBUTES: [VertexAttribute; 3] =
-        vertex_attr_array![0 => Float32x3, 1 => Float32x3 ,2 => Float32x2];
-
-    pub fn new(vec3: Vec3, normal: Vec3, uv: [f32; 2]) -> Self {
-        Self { vec3, normal, uv }
-    }
-
-    pub const fn layout() -> VertexBufferLayout<'static> {
-        VertexBufferLayout {
-            array_stride: size_of::<Self>() as u64,
-            step_mode: VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBUTES,
-        }
-    }
-}
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
-#[repr(C)]
-pub struct MaterialUniform {
-    base_colour: [f32; 4],
-    metallic: f32,
-    roughness: f32,
-    has_texture: u32,
-    _padding: [u8; 4],
-}
+use super::{Vertex, gpu::MaterialUniform};
 
 impl From<&Material> for MaterialUniform {
-    fn from(value: &Material) -> Self {
-        Self {
-            base_colour: value.base_colour,
-            metallic: value.metallic,
-            roughness: value.roughness,
-            has_texture: value.image.is_some() as _,
-            _padding: Default::default(),
-        }
+    fn from(m: &Material) -> Self {
+        MaterialUniform::new(
+            m.base_colour,
+            m.metallic,
+            m.roughness,
+            m.image.is_some(),
+        )
     }
 }
 pub struct Material {
@@ -89,4 +52,3 @@ impl Mesh {
         }
     }
 }
-

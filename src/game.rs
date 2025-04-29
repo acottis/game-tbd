@@ -44,9 +44,9 @@ impl Game {
     }
 
     pub fn load(&mut self, state: &State) {
-        let ground_mesh = state.mesh_instance(MeshInstanceId::Ground);
-        let cube_mesh1 = state.mesh_instance(MeshInstanceId::Cube);
-        let cube_mesh2 = state.mesh_instance(MeshInstanceId::Cube);
+        let ground_mesh = state.gpu.mesh_instance(MeshInstanceId::Ground);
+        let cube_mesh1 = state.gpu.mesh_instance(MeshInstanceId::Cube);
+        let cube_mesh2 = state.gpu.mesh_instance(MeshInstanceId::Cube);
         let ground = Entity::new(Vec3::zeroes(), ground_mesh, false);
         let mut cube1 =
             Entity::new(Vec3::new(-1.0, 3.0, 0.0), cube_mesh1, true);
