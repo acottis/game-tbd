@@ -20,7 +20,7 @@ mod camera;
 pub struct State {
     pub window: Arc<Window>,
     pub camera: Camera,
-    pub meshes: Vec<Rc<Mesh>>,
+    meshes: Vec<Rc<Mesh>>,
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
     device: Device,
@@ -340,7 +340,7 @@ impl State {
         }
     }
 
-    pub fn mesh_instance(&self, mesh: Rc<Mesh>) -> MeshInstance {
+    pub fn mesh_instance(&self, mesh: MeshInstanceId) -> MeshInstance {
         let transform = self.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Transform"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
@@ -356,9 +356,16 @@ impl State {
         });
 
         MeshInstance {
-            mesh,
+            mesh: self.mesh_from_id(mesh),
             transform,
             bind_group,
+        }
+    }
+    fn mesh_from_id(&self, id: MeshInstanceId) -> Rc<Mesh> {
+        match id {
+            MeshInstanceId::Ground => self.meshes[2].clone(),
+            MeshInstanceId::Cube => self.meshes[1].clone(),
+            MeshInstanceId::CubeGltf => self.meshes[0].clone(),
         }
     }
 
@@ -459,6 +466,12 @@ async fn init_wgpu(
         .await
         .unwrap();
     (adapter, device, queue)
+}
+
+pub enum MeshInstanceId {
+    Ground,
+    Cube,
+    CubeGltf,
 }
 
 pub struct MeshInstance {

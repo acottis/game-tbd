@@ -1,6 +1,4 @@
-use std::rc::Rc;
-
-use crate::graphics::{MeshInstance, State};
+use crate::graphics::{MeshInstance, MeshInstanceId, State};
 use crate::math::{Mat4, Vec3};
 use crate::physics::GRAVITY;
 
@@ -46,9 +44,9 @@ impl Game {
     }
 
     pub fn load(&mut self, state: &State) {
-        let ground_mesh = state.mesh_instance(state.meshes[2].clone());
-        let cube_mesh1 = state.mesh_instance(state.meshes[1].clone());
-        let cube_mesh2 = state.mesh_instance(state.meshes[1].clone());
+        let ground_mesh = state.mesh_instance(MeshInstanceId::Ground);
+        let cube_mesh1 = state.mesh_instance(MeshInstanceId::Cube);
+        let cube_mesh2 = state.mesh_instance(MeshInstanceId::Cube);
         let ground = Entity::new(Vec3::zeroes(), ground_mesh, false);
         let mut cube1 =
             Entity::new(Vec3::new(-1.0, 3.0, 0.0), cube_mesh1, true);
