@@ -1,6 +1,6 @@
 use std::{num::NonZeroU64, rc::Rc, sync::Arc};
 
-use assets::{MaterialUniform, Vertex, load_glb};
+use assets::{load_glb, MaterialUniform, Vertex};
 use bytemuck::{Pod, Zeroable, bytes_of};
 use camera::Camera;
 use wgpu::{
@@ -20,7 +20,7 @@ mod camera;
 pub struct State {
     pub window: Arc<Window>,
     pub camera: Camera,
-    meshes: Vec<Rc<Mesh>>,
+    meshes: Vec<Rc<GpuMesh>>,
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
     device: Device,
@@ -245,7 +245,7 @@ impl State {
         .flatten()
         .for_each(|model| self.meshes.push(Rc::new(self.load_model(&model))));
     }
-    fn load_model(&self, model: &assets::Mesh) -> Mesh {
+    fn load_model(&self, model: &assets::Mesh) -> GpuMesh {
         let index = self.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             usage: BufferUsages::INDEX,
@@ -332,7 +332,7 @@ impl State {
                 },
             ],
         });
-        Mesh {
+        GpuMesh {
             vertex,
             index,
             indices_len: model.indices.len() as u32,
@@ -361,7 +361,7 @@ impl State {
             bind_group,
         }
     }
-    fn mesh_from_id(&self, id: MeshInstanceId) -> Rc<Mesh> {
+    fn mesh_from_id(&self, id: MeshInstanceId) -> Rc<GpuMesh> {
         match id {
             MeshInstanceId::Ground => self.meshes[2].clone(),
             MeshInstanceId::Cube => self.meshes[1].clone(),
@@ -475,7 +475,7 @@ pub enum MeshInstanceId {
 }
 
 pub struct MeshInstance {
-    mesh: Rc<Mesh>,
+    mesh: Rc<GpuMesh>,
     transform: Buffer,
     bind_group: BindGroup,
 }
@@ -485,7 +485,7 @@ impl MeshInstance {
     }
 }
 
-pub struct Mesh {
+pub struct GpuMesh {
     vertex: Buffer,
     index: Buffer,
     indices_len: u32,
