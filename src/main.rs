@@ -4,7 +4,7 @@ use game::Game;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{KeyEvent, WindowEvent},
+    event::{KeyEvent, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
@@ -44,6 +44,11 @@ impl App {
     }
 
     #[inline(always)]
+    fn state(&mut self) -> &mut State {
+        unsafe { self.state.as_mut().unwrap_unchecked() }
+    }
+
+    #[inline(always)]
     fn render(&mut self) {
         self.state.as_mut().unwrap().render(&self.game.entities);
     }
@@ -53,37 +58,51 @@ impl App {
         if size.width * size.height == 0 {
             return;
         }
-        self.state.as_mut().unwrap().resize(size);
+        self.state().resize(size);
     }
 
-    fn handle_input(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
+    fn handle_key(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
         match event.physical_key {
             PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
             PhysicalKey::Code(KeyCode::ArrowLeft) => {
-                self.state.as_mut().unwrap().camera.strafe(-0.01);
+                self.state().camera.strafe(-0.01);
             }
             PhysicalKey::Code(KeyCode::ArrowRight) => {
-                self.state.as_mut().unwrap().camera.strafe(0.01);
+                self.state().camera.strafe(0.01);
             }
             PhysicalKey::Code(KeyCode::ArrowUp) => {
-                self.state.as_mut().unwrap().camera.forward(0.1);
+                self.state().camera.forward(0.1);
             }
             PhysicalKey::Code(KeyCode::ArrowDown) => {
-                self.state.as_mut().unwrap().camera.forward(-0.1);
+                self.state().camera.forward(-0.1);
             }
             PhysicalKey::Code(KeyCode::KeyH) => {
-                self.state.as_mut().unwrap().camera.rotate_y(PI / 16.0);
+                self.state().camera.rotate_y(PI / 16.0);
             }
             PhysicalKey::Code(KeyCode::KeyK) => {
-                self.state.as_mut().unwrap().camera.rotate_y(-PI / 16.0);
+                self.state().camera.rotate_y(-PI / 16.0);
             }
             PhysicalKey::Code(KeyCode::KeyU) => {
-                self.state.as_mut().unwrap().camera.rotate_x(PI / 16.0);
+                self.state().camera.rotate_x(PI / 16.0);
             }
             PhysicalKey::Code(KeyCode::KeyJ) => {
-                self.state.as_mut().unwrap().camera.rotate_x(-PI / 16.0);
+                self.state().camera.rotate_x(-PI / 16.0);
             }
             _ => {}
+        }
+    }
+
+    fn handle_scroll(&mut self, delta: MouseScrollDelta) {
+        match delta {
+            MouseScrollDelta::LineDelta(_, direction) => {
+                if direction == -1.0 {
+                    self.state().camera.forward(-0.4);
+                }
+                if direction == 1.0 {
+                    self.state().camera.forward(0.4);
+                }
+            }
+            MouseScrollDelta::PixelDelta(_) => (),
         }
     }
 }
@@ -101,7 +120,7 @@ impl ApplicationHandler for App {
         self.delta_time =
             now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
-        println!("FPS: {}", 1.0 / self.delta_time);
+        //println!("FPS: {}", 1.0 / self.delta_time);
         //println!("FPS: {}", self.delta_time);
 
         self.game.update(self.delta_time);
@@ -123,8 +142,10 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { ref event, .. } => {
-                self.handle_input(event_loop, event);
-                self.state.as_ref().unwrap().window.request_redraw();
+                self.handle_key(event_loop, event);
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.handle_scroll(delta);
             }
             // Ignored events
             WindowEvent::Moved(_) => {}

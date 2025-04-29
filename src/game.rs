@@ -10,10 +10,15 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn new(coords: Vec3, mesh: MeshInstance, physics: bool) -> Self {
+    pub fn new(
+        position: Vec3,
+        scale: Vec3,
+        mesh: MeshInstance,
+        physics: bool,
+    ) -> Self {
         Self {
-            position: coords,
-            scale: Vec3::xyz(1.0),
+            position,
+            scale,
             physics,
             mesh,
         }
@@ -44,17 +49,24 @@ impl Game {
     }
 
     pub fn init(&mut self, state: &State) {
-        let ground_mesh = state.gpu.get_mesh(MeshId::Ground);
-        let cube_mesh1 = state.gpu.get_mesh(MeshId::Cube);
-        let cube_mesh2 = state.gpu.get_mesh(MeshId::Cube);
-
-        let mut ground = Entity::new(Vec3::zeroes(), ground_mesh, false);
-        ground.scale = Vec3::xyz(20.0);
-        let mut cube1 =
-            Entity::new(Vec3::new(-1.0, 3.0, 0.0), cube_mesh1, true);
-        cube1.scale = Vec3::xyz(0.3);
-        let mut cube2 = Entity::new(Vec3::new(1.0, 3.0, 0.0), cube_mesh2, true);
-        cube2.scale = Vec3::xyz(0.3);
+        let ground = Entity::new(
+            Vec3::zeroes(),
+            Vec3::xyz(20.0),
+            state.gpu.get_mesh(MeshId::Ground),
+            false,
+        );
+        let cube1 = Entity::new(
+            Vec3::new(-1.0, 3.0, 0.0),
+            Vec3::xyz(0.3),
+            state.gpu.get_mesh(MeshId::Cube),
+            true,
+        );
+        let cube2 = Entity::new(
+            Vec3::new(1.0, 3.0, 0.0),
+            Vec3::xyz(0.3),
+            state.gpu.get_mesh(MeshId::Cube),
+            true,
+        );
 
         self.entities.push(ground);
         self.entities.push(cube2);
