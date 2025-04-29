@@ -1,6 +1,6 @@
 use std::{num::NonZeroU64, rc::Rc, sync::Arc};
 
-use assets::{MaterialUniform, Mesh, Vertex, load_glb};
+use assets::{MaterialUniform, Vertex, load_glb};
 use bytemuck::{Pod, Zeroable, bytes_of};
 use camera::Camera;
 use wgpu::{
@@ -20,13 +20,14 @@ mod camera;
 pub struct State {
     pub window: Arc<Window>,
     pub camera: Camera,
-    pub meshes: Vec<Rc<MeshInstance>>,
+    pub meshes: Vec<Rc<Mesh>>,
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
     device: Device,
     queue: Queue,
     render_pipeline: RenderPipeline,
     texture_layout: BindGroupLayout,
+    transform_layout: BindGroupLayout,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
     light_bind_group: BindGroup,
@@ -121,18 +122,6 @@ impl State {
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(
-                            size_of::<Mat4>() as u64
-                        ),
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
@@ -141,12 +130,12 @@ impl State {
                             MaterialUniform,
                         >(
                         )
-                            as u64),
+                            as _),
                     },
                     count: None,
                 },
                 BindGroupLayoutEntry {
-                    binding: 2,
+                    binding: 1,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Texture {
                         sample_type: TextureSampleType::Float {
@@ -158,7 +147,7 @@ impl State {
                     count: None,
                 },
                 BindGroupLayoutEntry {
-                    binding: 3,
+                    binding: 2,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
@@ -168,6 +157,22 @@ impl State {
         let texture_layout =
             device.create_bind_group_layout(&texture_layout_descriptor);
 
+        let transform_layout_descriptor = BindGroupLayoutDescriptor {
+            label: Some("Transform"),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                },
+                count: None,
+            }],
+        };
+        let transform_layout =
+            device.create_bind_group_layout(&transform_layout_descriptor);
+
         let pipeline_layout =
             device.create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: None,
@@ -175,6 +180,7 @@ impl State {
                     &camera_layout,
                     &light_layout,
                     &texture_layout,
+                    &transform_layout,
                 ],
                 push_constant_ranges: &[],
             });
@@ -219,6 +225,7 @@ impl State {
             device,
             queue,
             texture_layout,
+            transform_layout,
             render_pipeline,
             camera,
             camera_bind_group,
@@ -238,7 +245,7 @@ impl State {
         .flatten()
         .for_each(|model| self.meshes.push(Rc::new(self.load_model(&model))));
     }
-    fn load_model(&self, model: &Mesh) -> MeshInstance {
+    fn load_model(&self, model: &assets::Mesh) -> Mesh {
         let index = self.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             usage: BufferUsages::INDEX,
@@ -258,13 +265,6 @@ impl State {
                 label: None,
                 usage: BufferUsages::UNIFORM,
                 contents: bytes_of(&material_uniform),
-            });
-
-        let vertex_uniform =
-            self.device.create_buffer_init(&BufferInitDescriptor {
-                label: Some("Vertex Uniform"),
-                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                contents: bytes_of(&Mat4::identity()),
             });
 
         let texture_view = if let Some(ref image) = model.material.image {
@@ -320,29 +320,51 @@ impl State {
             entries: &[
                 BindGroupEntry {
                     binding: 0,
-                    resource: vertex_uniform.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
                     resource: material_uniform_buffer.as_entire_binding(),
                 },
                 BindGroupEntry {
-                    binding: 2,
+                    binding: 1,
                     resource: BindingResource::TextureView(&texture_view),
                 },
                 BindGroupEntry {
-                    binding: 3,
+                    binding: 2,
                     resource: BindingResource::Sampler(&sampler),
                 },
             ],
         });
-        MeshInstance {
+        Mesh {
             vertex,
             index,
             indices_len: model.indices.len() as u32,
             bind_group,
-            vertex_uniform,
         }
+    }
+
+    pub fn mesh_instance(&self, mesh: Rc<Mesh>) -> MeshInstance {
+        let transform = self.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Transform"),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            contents: bytes_of(&Mat4::identity()),
+        });
+        let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Transform"),
+            layout: &self.transform_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: transform.as_entire_binding(),
+            }],
+        });
+
+        MeshInstance {
+            mesh,
+            transform,
+            bind_group,
+        }
+    }
+
+    fn write_camera(&mut self, camera: &Mat4) {
+        self.queue
+            .write_buffer(&self.camera_buffer, 0, bytes_of(camera));
     }
 
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
@@ -374,29 +396,37 @@ impl State {
             timestamp_writes: None,
             occlusion_query_set: None,
         };
-        self.queue.write_buffer(
-            &self.camera_buffer,
-            0,
-            bytes_of(&self.camera.view_perspective_rh()),
-        );
 
         // GPU work goes here
         {
             let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
-
             render_pass.set_pipeline(&self.render_pipeline);
+
+            self.write_camera(&self.camera.view_perspective_rh());
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in entities {
                 entity.mesh.transform(&self.queue, entity.transform());
-                render_pass.set_bind_group(2, &entity.mesh.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, entity.mesh.vertex.slice(..));
+                render_pass.set_bind_group(
+                    2,
+                    &entity.mesh.mesh.bind_group,
+                    &[],
+                );
+                render_pass.set_bind_group(3, &entity.mesh.bind_group, &[]);
+
+                render_pass
+                    .set_vertex_buffer(0, entity.mesh.mesh.vertex.slice(..));
+
                 render_pass.set_index_buffer(
-                    entity.mesh.index.slice(..),
+                    entity.mesh.mesh.index.slice(..),
                     IndexFormat::Uint32,
                 );
-                render_pass.draw_indexed(0..entity.mesh.indices_len, 0, 0..1);
+                render_pass.draw_indexed(
+                    0..entity.mesh.mesh.indices_len,
+                    0,
+                    0..1,
+                );
             }
         }
 
@@ -432,17 +462,21 @@ async fn init_wgpu(
 }
 
 pub struct MeshInstance {
+    mesh: Rc<Mesh>,
+    transform: Buffer,
+    bind_group: BindGroup,
+}
+impl MeshInstance {
+    fn transform(&self, queue: &Queue, matrix: Mat4) {
+        queue.write_buffer(&self.transform, 0, bytes_of(&matrix));
+    }
+}
+
+pub struct Mesh {
     vertex: Buffer,
     index: Buffer,
     indices_len: u32,
     bind_group: BindGroup,
-    vertex_uniform: Buffer,
-}
-
-impl MeshInstance {
-    fn transform(&self, queue: &Queue, matrix: Mat4) {
-        queue.write_buffer(&self.vertex_uniform, 0, bytes_of(&matrix));
-    }
 }
 
 #[derive(Zeroable, Pod, Copy, Clone)]

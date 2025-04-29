@@ -8,11 +8,11 @@ pub struct Entity {
     position: Vec3,
     scale: Vec3,
     physics: bool,
-    pub mesh: Rc<MeshInstance>,
+    pub mesh: MeshInstance,
 }
 
 impl Entity {
-    pub fn new(coords: Vec3, mesh: Rc<MeshInstance>, physics: bool) -> Self {
+    pub fn new(coords: Vec3, mesh: MeshInstance, physics: bool) -> Self {
         Self {
             position: coords,
             scale: Vec3::xyz(1.0),
@@ -46,19 +46,14 @@ impl Game {
     }
 
     pub fn load(&mut self, state: &State) {
-        let ground =
-            Entity::new(Vec3::zeroes(), state.meshes[2].clone(), false);
-        let mut cube1 = Entity::new(
-            Vec3::new(0.0, 3.0, 0.0),
-            state.meshes[1].clone(),
-            true,
-        );
+        let ground_mesh = state.mesh_instance(state.meshes[2].clone());
+        let cube_mesh1 = state.mesh_instance(state.meshes[1].clone());
+        let cube_mesh2 = state.mesh_instance(state.meshes[1].clone());
+        let ground = Entity::new(Vec3::zeroes(), ground_mesh, false);
+        let mut cube1 =
+            Entity::new(Vec3::new(-1.0, 3.0, 0.0), cube_mesh1, true);
         cube1.scale = Vec3::xyz(0.3);
-        let mut cube2 = Entity::new(
-            Vec3::new(2.0, 3.0, 0.0),
-            state.meshes[1].clone(),
-            true,
-        );
+        let mut cube2 = Entity::new(Vec3::new(1.0, 3.0, 0.0), cube_mesh2, true);
         cube2.scale = Vec3::xyz(0.3);
         self.entities.push(ground);
         self.entities.push(cube2);

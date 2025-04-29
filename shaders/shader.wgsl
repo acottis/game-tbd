@@ -31,13 +31,14 @@ var<uniform> camera: mat4x4<f32>;
 var<uniform> light: Light;
 
 @group(2) @binding(0)
-var<uniform> model_transform: mat4x4<f32>;
-@group(2) @binding(1)
 var<uniform> material: Material;
-@group(2) @binding(2)
+@group(2) @binding(1)
 var t_diffuse: texture_2d<f32>;
-@group(2) @binding(3)
+@group(2) @binding(2)
 var s_diffuse: sampler;
+
+@group(3) @binding(0)
+var<uniform> model_transform: mat4x4<f32>;
 
 
 @vertex
