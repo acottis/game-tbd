@@ -46,18 +46,23 @@ impl Game {
     }
 
     pub fn load(&mut self, state: &State) {
-        let mut cube = Entity::new(
-            Vec3::new(0.0, 2.0, 0.0),
+        let ground =
+            Entity::new(Vec3::zeroes(), state.meshes[2].clone(), false);
+        let mut cube1 = Entity::new(
+            Vec3::new(0.0, 3.0, 0.0),
             state.meshes[1].clone(),
             true,
         );
-        cube.scale = Vec3::xyz(0.3);
-        self.entities.push(Entity::new(
-            Vec3::zeroes(),
-            state.meshes[2].clone(),
-            false,
-        ));
-        self.entities.push(cube);
+        cube1.scale = Vec3::xyz(0.3);
+        let mut cube2 = Entity::new(
+            Vec3::new(2.0, 3.0, 0.0),
+            state.meshes[1].clone(),
+            true,
+        );
+        cube2.scale = Vec3::xyz(0.3);
+        self.entities.push(ground);
+        self.entities.push(cube2);
+        self.entities.push(cube1);
     }
 
     pub fn update(&mut self, delta_time: f32) {

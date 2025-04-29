@@ -390,7 +390,6 @@ impl State {
 
             for entity in entities {
                 entity.mesh.transform(&self.queue, entity.transform());
-
                 render_pass.set_bind_group(2, &entity.mesh.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, entity.mesh.vertex.slice(..));
                 render_pass.set_index_buffer(
