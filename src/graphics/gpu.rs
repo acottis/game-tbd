@@ -228,7 +228,7 @@ impl Gpu {
         }
     }
 
-    pub fn mesh_instance(&self, mesh: MeshId) -> MeshInstance {
+    pub fn get_mesh(&self, mesh: MeshId) -> MeshInstance {
         let transform = self.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Transform"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,

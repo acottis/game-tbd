@@ -43,13 +43,13 @@ impl Game {
         }
     }
 
-    pub fn load(&mut self, state: &State) {
-        let ground_mesh = state.gpu.mesh_instance(MeshId::Ground);
-        let cube_mesh1 = state.gpu.mesh_instance(MeshId::Cube);
-        let cube_mesh2 = state.gpu.mesh_instance(MeshId::Cube);
+    pub fn init(&mut self, state: &State) {
+        let ground_mesh = state.gpu.get_mesh(MeshId::Ground);
+        let cube_mesh1 = state.gpu.get_mesh(MeshId::Cube);
+        let cube_mesh2 = state.gpu.get_mesh(MeshId::Cube);
 
         let mut ground = Entity::new(Vec3::zeroes(), ground_mesh, false);
-        ground.scale = Vec3::xyz(2.0);
+        ground.scale = Vec3::xyz(20.0);
         let mut cube1 =
             Entity::new(Vec3::new(-1.0, 3.0, 0.0), cube_mesh1, true);
         cube1.scale = Vec3::xyz(0.3);

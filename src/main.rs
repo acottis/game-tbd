@@ -39,7 +39,7 @@ impl App {
         let meshes = graphics::load_assets();
         state.gpu.load_meshes(meshes);
 
-        self.game.load(&state);
+        self.game.init(&state);
         self.state = Some(state)
     }
 
