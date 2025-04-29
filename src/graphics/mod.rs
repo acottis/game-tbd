@@ -3,9 +3,6 @@ use std::sync::Arc;
 use assets::load_glb;
 
 use gpu::Gpu;
-use wgpu::{
-    VertexAttribute, VertexBufferLayout, VertexStepMode, vertex_attr_array,
-};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{game::Entity, math::Vec3};
@@ -16,21 +13,27 @@ mod gpu;
 mod light;
 pub use camera::Camera;
 pub use gpu::MeshInstance;
+pub use gpu::Vertex;
 pub use light::Light;
 
-pub struct State {
+pub struct Graphics {
     pub window: Arc<Window>,
     pub camera: Camera,
     pub gpu: Gpu,
 }
 
-impl State {
+impl Graphics {
     pub fn new(window: Window) -> Self {
         let window = Arc::new(window);
         let window_size = window.inner_size();
+
         let camera = Camera::new(&window_size);
-        let light =
-            Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 0.0), 0.5);
+        let light = Light::new(
+            Vec3::new(0.0, 0.5, 0.5),
+            Vec3::new(1.0, 1.0, 0.0),
+            0.75,
+        );
+
         let gpu = Gpu::new(
             window.clone(),
             window_size.width,
@@ -74,28 +77,4 @@ pub enum MeshInstanceId {
     Ground,
     Cube,
     CubeGltf,
-}
-
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
-#[repr(C)]
-pub struct Vertex {
-    vec3: Vec3,
-    normal: Vec3,
-    uv: [f32; 2],
-}
-impl Vertex {
-    const ATTRIBUTES: [VertexAttribute; 3] =
-        vertex_attr_array![0 => Float32x3, 1 => Float32x3 ,2 => Float32x2];
-
-    pub fn new(vec3: Vec3, normal: Vec3, uv: [f32; 2]) -> Self {
-        Self { vec3, normal, uv }
-    }
-
-    pub const fn layout() -> VertexBufferLayout<'static> {
-        VertexBufferLayout {
-            array_stride: size_of::<Self>() as u64,
-            step_mode: VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBUTES,
-        }
-    }
 }

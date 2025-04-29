@@ -6,7 +6,10 @@ use wgpu::{
     *,
 };
 
-use crate::{game::Entity, graphics::Vertex, math::Mat4};
+use crate::{
+    game::Entity,
+    math::{Mat4, Vec3},
+};
 
 use super::{Camera, Light, MeshInstanceId, assets};
 
@@ -22,7 +25,7 @@ pub struct Gpu {
     camera_bind_group: BindGroup,
     camera_buffer: Buffer,
     light_bind_group: BindGroup,
-    light_buffer: Buffer,
+    _light_buffer: Buffer,
 }
 
 impl Gpu {
@@ -48,7 +51,7 @@ impl Gpu {
         let (camera_bind_group, camera_buffer, camera_layout) =
             load_camera(&device, camera);
 
-        let (light_bind_group, light_buffer, light_layout) =
+        let (light_bind_group, _light_buffer, light_layout) =
             load_light(&device, light);
 
         let texture_layout = texture_layout(&device);
@@ -113,7 +116,7 @@ impl Gpu {
             camera_bind_group,
             camera_buffer,
             light_bind_group,
-            light_buffer,
+            _light_buffer,
             meshes: Vec::new(),
         }
     }
@@ -265,9 +268,6 @@ impl Gpu {
         let frame = self.surface.get_current_texture().unwrap();
         let view = &frame.texture.create_view(&Default::default());
 
-        let mut encoder =
-            self.device.create_command_encoder(&Default::default());
-
         let render_pass_desc = RenderPassDescriptor {
             label: None,
             color_attachments: &[Some(RenderPassColorAttachment {
@@ -284,6 +284,9 @@ impl Gpu {
             occlusion_query_set: None,
         };
 
+        let mut encoder =
+            self.device.create_command_encoder(&Default::default());
+
         // GPU work goes here
         {
             let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
@@ -293,7 +296,7 @@ impl Gpu {
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in entities {
-                entity.mesh.transform(&self.queue, entity.transform());
+                entity.mesh.write_transform(&self.queue, entity.transform());
                 render_pass.set_bind_group(
                     2,
                     &entity.mesh.mesh.bind_group,
@@ -476,7 +479,7 @@ pub struct MeshInstance {
     bind_group: BindGroup,
 }
 impl MeshInstance {
-    fn transform(&self, queue: &Queue, matrix: Mat4) {
+    fn write_transform(&self, queue: &Queue, matrix: Mat4) {
         queue.write_buffer(&self.transform, 0, bytes_of(&matrix));
     }
 }
@@ -510,6 +513,30 @@ impl MaterialUniform {
             roughness,
             has_texture: has_texture as u32,
             _padding: Default::default(),
+        }
+    }
+}
+
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
+#[repr(C)]
+pub struct Vertex {
+    vec3: Vec3,
+    normal: Vec3,
+    uv: [f32; 2],
+}
+impl Vertex {
+    const ATTRIBUTES: [VertexAttribute; 3] =
+        vertex_attr_array![0 => Float32x3, 1 => Float32x3 ,2 => Float32x2];
+
+    pub fn new(vec3: Vec3, normal: Vec3, uv: [f32; 2]) -> Self {
+        Self { vec3, normal, uv }
+    }
+
+    const fn layout() -> VertexBufferLayout<'static> {
+        VertexBufferLayout {
+            array_stride: size_of::<Self>() as u64,
+            step_mode: VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBUTES,
         }
     }
 }

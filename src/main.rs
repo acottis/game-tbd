@@ -14,10 +14,10 @@ mod game;
 mod graphics;
 mod math;
 mod physics;
-use graphics::State;
+use graphics::Graphics;
 
 struct App {
-    state: Option<State>,
+    state: Option<Graphics>,
     game: Game,
     last_frame_time: Instant,
     delta_time: f32,
@@ -34,17 +34,19 @@ impl App {
     }
 
     fn init(&mut self, window: Window) {
-        let mut state = State::new(window);
+        let mut state = Graphics::new(window);
         let meshes = graphics::load_assets();
         state.gpu.load_meshes(meshes);
         self.game.load(&state);
         self.state = Some(state)
     }
 
+    #[inline(always)]
     fn render(&mut self) {
         self.state.as_mut().unwrap().render(&self.game.entities);
     }
 
+    #[inline(always)]
     fn resize(&mut self, size: PhysicalSize<u32>) {
         if size.width * size.height == 0 {
             return;

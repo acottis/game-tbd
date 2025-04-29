@@ -1,4 +1,4 @@
-use crate::graphics::{MeshInstance, MeshInstanceId, State};
+use crate::graphics::{Graphics, MeshInstance, MeshInstanceId};
 use crate::math::{Mat4, Vec3};
 use crate::physics::GRAVITY;
 
@@ -43,7 +43,7 @@ impl Game {
         }
     }
 
-    pub fn load(&mut self, state: &State) {
+    pub fn load(&mut self, state: &Graphics) {
         let ground_mesh = state.gpu.mesh_instance(MeshInstanceId::Ground);
         let cube_mesh1 = state.gpu.mesh_instance(MeshInstanceId::Cube);
         let cube_mesh2 = state.gpu.mesh_instance(MeshInstanceId::Cube);

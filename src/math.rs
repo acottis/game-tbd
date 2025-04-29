@@ -6,6 +6,7 @@ pub struct Mat3 {
     pub y: Vec3,
     pub z: Vec3,
 }
+
 impl Mat3 {
     pub fn rotation_x(theta: f32) -> Self {
         let cos = theta.cos();
@@ -280,7 +281,6 @@ mod tests {
 
     #[test]
     fn test_mat4_identity_multiplication() {
-        // Define two sample matrices
         let mat_a = Mat4 {
             x: Vec4::new(1.0, 2.0, 3.0, 4.0),
             y: Vec4::new(5.0, 6.0, 7.0, 8.0),
@@ -290,7 +290,6 @@ mod tests {
 
         let mat_b = Mat4::identity();
 
-        // Perform matrix multiplication
         let result = mat_a * mat_b;
 
         let expected = Mat4 {
@@ -300,7 +299,6 @@ mod tests {
             w: Vec4::new(13.0, 14.0, 15.0, 16.0),
         };
 
-        // Assert that the result of multiplication is correct
         assert_eq!(result, expected);
     }
 
