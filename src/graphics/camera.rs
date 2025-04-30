@@ -48,11 +48,14 @@ impl Camera {
         self.position = self.position + offset;
         println!("T:{:?}\nP:{:?}", self.target, self.position);
     }
-    pub fn rotate_x(&mut self, theta: f32) {
-        self.position = Mat3::rotation_x(theta) * self.position;
+    pub fn rotate_x(&mut self, delta_time: f32, theta: f32) {
+        self.position = Mat3::rotation_x(theta * delta_time) * self.position;
     }
-    pub fn rotate_y(&mut self, theta: f32) {
-        self.position = Mat3::rotation_y(theta) * self.position;
+    pub fn rotate_y(&mut self, delta_time: f32, theta: f32) {
+        self.position = Mat3::rotation_y(theta * delta_time) * self.position;
+    }
+    pub fn rotate_z(&mut self, delta_time: f32, theta: f32) {
+        self.position = Mat3::rotation_z(theta * delta_time) * self.position;
     }
     pub fn forward(&mut self, delta_time: f32, speed: f32) {
         let forward = (self.target - self.position).normalise();

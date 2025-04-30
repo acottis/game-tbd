@@ -1,6 +1,7 @@
 use std::{f32::consts::PI, time::Instant};
 
 use game::Game;
+use input::Input;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -12,6 +13,7 @@ use winit::{
 
 mod game;
 mod graphics;
+mod input;
 mod math;
 mod physics;
 use graphics::State;
@@ -19,6 +21,7 @@ use graphics::State;
 struct App {
     state: Option<State>,
     game: Game,
+    input: Input,
     last_frame_time: Instant,
     delta_time: f32,
 }
@@ -28,6 +31,7 @@ impl App {
         Self {
             state: None,
             game: Game::new(),
+            input: Input::new(),
             last_frame_time: Instant::now(),
             delta_time: 0.0,
         }
@@ -61,72 +65,64 @@ impl App {
         self.state().resize(size);
     }
 
-    fn handle_key(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
-        let dt = self.delta_time;
-        println!("{event:?}");
-        match event.physical_key {
-            PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
-            PhysicalKey::Code(KeyCode::ArrowLeft) => {
-                self.state().camera.strafe(dt, -10.0)
-            }
-            PhysicalKey::Code(KeyCode::ArrowRight) => {
-                self.state().camera.strafe(dt, 10.0)
-            }
-            PhysicalKey::Code(KeyCode::ArrowUp) => {
-                self.state().camera.forward(dt, 100.0)
-            }
-            PhysicalKey::Code(KeyCode::ArrowDown) => {
-                self.state().camera.forward(dt, -100.0)
-            }
-            PhysicalKey::Code(KeyCode::KeyH) => {
-                self.state().camera.rotate_y(PI / 16.0)
-            }
-            PhysicalKey::Code(KeyCode::KeyK) => {
-                self.state().camera.rotate_y(-PI / 16.0)
-            }
-            PhysicalKey::Code(KeyCode::KeyU) => {
-                self.state().camera.rotate_x(PI / 16.0)
-            }
-            PhysicalKey::Code(KeyCode::KeyJ) => {
-                self.state().camera.rotate_x(-PI / 16.0)
-            }
-            PhysicalKey::Code(KeyCode::KeyW) => {
-                let player = &mut self.game.entities[1];
-                player.move_x(dt, 100.0);
-            }
-            PhysicalKey::Code(KeyCode::KeyA) => {
-                let player = &mut self.game.entities[1];
-                player.move_z(dt, -100.0);
-            }
-            PhysicalKey::Code(KeyCode::KeyS) => {
-                let player = &mut self.game.entities[1];
-                player.move_x(dt, -100.0);
-            }
-            PhysicalKey::Code(KeyCode::KeyD) => {
-                let player = &mut self.game.entities[1];
-                player.move_z(dt, 100.0);
-            }
-            PhysicalKey::Code(KeyCode::Space) => {
-                let player = &mut self.game.entities[1];
-                player.jump(dt, 1000.0);
-            }
-            _ => {}
+    fn run_input(&mut self, event_loop: &ActiveEventLoop) {
+        let player = &mut self.game.entities[1];
+        let camera = &mut self.state.as_mut().unwrap().camera;
+        if self.input.is_pressed(KeyCode::KeyW) {
+            player.move_x(self.delta_time, 10.0);
+        }
+        if self.input.is_pressed(KeyCode::KeyA) {
+            player.move_z(self.delta_time, -10.0);
+        }
+        if self.input.is_pressed(KeyCode::KeyS) {
+            player.move_x(self.delta_time, -10.0);
+        }
+        if self.input.is_pressed(KeyCode::KeyD) {
+            player.move_z(self.delta_time, 10.0);
+        }
+        if self.input.is_pressed(KeyCode::Space) {
+            player.move_y(self.delta_time, 10.0);
+        }
+        if self.input.is_pressed(KeyCode::ArrowUp) {
+            camera.forward(self.delta_time, 10.0)
+        }
+        if self.input.is_pressed(KeyCode::ArrowLeft) {
+            camera.strafe(self.delta_time, -1.0);
+        }
+        if self.input.is_pressed(KeyCode::ArrowDown) {
+            camera.forward(self.delta_time, -10.0)
+        }
+        if self.input.is_pressed(KeyCode::ArrowRight) {
+            camera.strafe(self.delta_time, 1.0);
+        }
+        if self.input.is_pressed(KeyCode::KeyU) {
+            camera.rotate_z(self.delta_time, PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyH) {
+            camera.rotate_y(self.delta_time, -PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyJ) {
+            camera.rotate_z(self.delta_time, -PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyK) {
+            camera.rotate_y(self.delta_time, PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::Escape) {
+            event_loop.exit();
         }
     }
 
-    fn handle_scroll(&mut self, delta: MouseScrollDelta) {
-        let dt = self.delta_time;
-        match delta {
-            MouseScrollDelta::LineDelta(_, direction) => {
-                if direction == -1.0 {
-                    self.state().camera.forward(dt, -100.0);
-                }
-                if direction == 1.0 {
-                    self.state().camera.forward(dt, 100.0);
-                }
-            }
-            MouseScrollDelta::PixelDelta(_) => (),
-        }
+    fn run_game(&mut self) {
+        self.game.update(self.delta_time);
+    }
+
+    fn update_delta_time(&mut self) {
+        let now = Instant::now();
+        self.delta_time =
+            now.duration_since(self.last_frame_time).as_secs_f32();
+        self.last_frame_time = now;
+        //println!("FPS: {}", 1.0 / self.delta_time);
+        //println!("FPS: {}", self.delta_time);
     }
 }
 
@@ -138,16 +134,10 @@ impl ApplicationHandler for App {
         self.init(window);
     }
 
-    fn about_to_wait(&mut self, _: &ActiveEventLoop) {
-        let now = Instant::now();
-        self.delta_time =
-            now.duration_since(self.last_frame_time).as_secs_f32();
-        self.last_frame_time = now;
-        //println!("FPS: {}", 1.0 / self.delta_time);
-        //println!("FPS: {}", self.delta_time);
-
-        self.game.update(self.delta_time);
-
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.update_delta_time();
+        self.run_input(event_loop);
+        self.run_game();
         self.render();
     }
 
@@ -165,11 +155,27 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { ref event, .. } => {
-                self.handle_key(event_loop, event);
+                self.input.handle_keyboard(event);
             }
-            WindowEvent::MouseWheel { delta, .. } => {
-                self.handle_scroll(delta);
-            }
+            WindowEvent::MouseWheel { delta, .. } => match delta {
+                MouseScrollDelta::LineDelta(_, direction) => {
+                    if direction == -1.0 {
+                        self.state
+                            .as_mut()
+                            .unwrap()
+                            .camera
+                            .forward(self.delta_time, -100.0);
+                    }
+                    if direction == 1.0 {
+                        self.state
+                            .as_mut()
+                            .unwrap()
+                            .camera
+                            .forward(self.delta_time, 100.0);
+                    }
+                }
+                MouseScrollDelta::PixelDelta(_) => (),
+            },
             // Ignored events
             WindowEvent::Moved(_) => {}
             WindowEvent::CursorMoved { .. } => {}

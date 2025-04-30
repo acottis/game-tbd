@@ -25,20 +25,20 @@ impl Entity {
             falling: false,
         }
     }
-    pub fn position(&self) -> Vec3 {
+    pub const fn position(&self) -> Vec3 {
         self.position
     }
-    pub fn move_x(&mut self, delta_time: f32, x: f32) {
+    pub const fn move_x(&mut self, delta_time: f32, x: f32) {
         self.position.x += x * delta_time;
     }
-    pub fn move_y(&mut self, delta_time: f32, y: f32) {
+    pub const fn move_y(&mut self, delta_time: f32, y: f32) {
         self.position.y += y * delta_time;
     }
-    pub fn move_z(&mut self, delta_time: f32, z: f32) {
+    pub const fn move_z(&mut self, delta_time: f32, z: f32) {
         self.position.z += z * delta_time;
     }
 
-    pub fn jump(&mut self, delta_time: f32, y: f32) {
+    pub const fn jump(&mut self, delta_time: f32, y: f32) {
         if self.falling {
             return;
         };
@@ -50,7 +50,7 @@ impl Entity {
         Mat4::from_translation(self.position) * Mat4::from_scaling(self.scale)
     }
 
-    fn check_collision(&mut self) {
+    const fn check_collision(&mut self) {
         if self.position.y <= 0.0 {
             self.falling = false;
             self.position.y = 0.0;
