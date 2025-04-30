@@ -5,9 +5,9 @@ use input::Input;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{KeyEvent, MouseScrollDelta, WindowEvent},
+    event::{MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::KeyCode,
     window::{Window, WindowId},
 };
 
@@ -69,31 +69,31 @@ impl App {
         let player = &mut self.game.entities[1];
         let camera = &mut self.state.as_mut().unwrap().camera;
         if self.input.is_pressed(KeyCode::KeyW) {
-            player.move_x(self.delta_time, 10.0);
+            player.move_x(self.delta_time, 5.0);
         }
         if self.input.is_pressed(KeyCode::KeyA) {
-            player.move_z(self.delta_time, -10.0);
+            player.move_z(self.delta_time, -5.0);
         }
         if self.input.is_pressed(KeyCode::KeyS) {
-            player.move_x(self.delta_time, -10.0);
+            player.move_x(self.delta_time, -5.0);
         }
         if self.input.is_pressed(KeyCode::KeyD) {
-            player.move_z(self.delta_time, 10.0);
+            player.move_z(self.delta_time, 5.0);
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.move_y(self.delta_time, 10.0);
+            player.jump(self.delta_time, 2000.0);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.forward(self.delta_time, 10.0)
         }
         if self.input.is_pressed(KeyCode::ArrowLeft) {
-            camera.strafe(self.delta_time, -1.0);
+            camera.strafe(self.delta_time, -10.0);
         }
         if self.input.is_pressed(KeyCode::ArrowDown) {
             camera.forward(self.delta_time, -10.0)
         }
         if self.input.is_pressed(KeyCode::ArrowRight) {
-            camera.strafe(self.delta_time, 1.0);
+            camera.strafe(self.delta_time, 10.0);
         }
         if self.input.is_pressed(KeyCode::KeyU) {
             camera.rotate_z(self.delta_time, PI / 2.0)

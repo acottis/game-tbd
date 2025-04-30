@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use winit::{
-    event::{KeyEvent, MouseScrollDelta},
+    event::KeyEvent,
     keyboard::{KeyCode, PhysicalKey},
 };
 

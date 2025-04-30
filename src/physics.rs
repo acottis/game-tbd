@@ -1,3 +1,1 @@
-pub const GRAVITY: f32 = -0.981;
-
-fn update() {}
+pub const GRAVITY: f32 = -1.81;
