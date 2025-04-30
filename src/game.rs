@@ -6,6 +6,7 @@ pub struct Entity {
     position: Vec3,
     scale: Vec3,
     physics: bool,
+    falling: bool,
     pub mesh: MeshInstance,
 }
 
@@ -21,6 +22,7 @@ impl Entity {
             scale,
             physics,
             mesh,
+            falling: false,
         }
     }
     pub fn position(&self) -> Vec3 {
@@ -36,12 +38,21 @@ impl Entity {
         self.position.z += z * delta_time;
     }
 
+    pub fn jump(&mut self, delta_time: f32, y: f32) {
+        if self.falling {
+            return;
+        };
+        self.move_y(delta_time, y);
+        self.falling = true
+    }
+
     pub fn transform(&self) -> Mat4 {
         Mat4::from_translation(self.position) * Mat4::from_scaling(self.scale)
     }
 
     fn check_collision(&mut self) {
         if self.position.y <= 0.0 {
+            self.falling = false;
             self.position.y = 0.0;
         }
     }

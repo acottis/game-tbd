@@ -42,6 +42,12 @@ impl Camera {
     pub fn target(&self) -> Vec3 {
         self.target
     }
+    pub fn follow(&mut self, target: Vec3) {
+        let offset = target - self.target;
+        self.target = target;
+        self.position = self.position + offset;
+        println!("T:{:?}\nP:{:?}", self.target, self.position);
+    }
     pub fn rotate_x(&mut self, theta: f32) {
         self.position = Mat3::rotation_x(theta) * self.position;
     }
@@ -52,12 +58,12 @@ impl Camera {
         let forward = (self.target - self.position).normalise();
         self.position += forward * speed * delta_time;
     }
-    /// + is right
-    /// - is left
+    /// + is right, - is left
     pub fn strafe(&mut self, delta_time: f32, speed: f32) {
         let forward = (self.target - self.position).normalise();
         let right = forward.cross(&self.up).normalise();
-        let right = self.up.cross(&forward).normalise();
+        //let right = self.up.cross(&forward).normalise();
+
         let delta = right * speed * delta_time;
 
         self.position += delta;

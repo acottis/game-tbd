@@ -229,11 +229,12 @@ impl core::ops::Mul<Vec3> for Mat3 {
 impl core::ops::Add for Vec3 {
     type Output = Self;
 
-    fn add(mut self, rhs: Self) -> Self::Output {
-        self.x += rhs.x;
-        self.y += rhs.y;
-        self.z += rhs.z;
-        self
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
     }
 }
 impl core::ops::Sub for Vec3 {

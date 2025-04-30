@@ -63,6 +63,7 @@ impl App {
 
     fn handle_key(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
         let dt = self.delta_time;
+        println!("{event:?}");
         match event.physical_key {
             PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
             PhysicalKey::Code(KeyCode::ArrowLeft) => {
@@ -92,51 +93,22 @@ impl App {
             PhysicalKey::Code(KeyCode::KeyW) => {
                 let player = &mut self.game.entities[1];
                 player.move_x(dt, 100.0);
-                self.state
-                    .as_mut()
-                    .unwrap()
-                    .camera
-                    .set_target(player.position());
             }
             PhysicalKey::Code(KeyCode::KeyA) => {
                 let player = &mut self.game.entities[1];
                 player.move_z(dt, -100.0);
-                self.state
-                    .as_mut()
-                    .unwrap()
-                    .camera
-                    .set_target(player.position());
             }
             PhysicalKey::Code(KeyCode::KeyS) => {
                 let player = &mut self.game.entities[1];
                 player.move_x(dt, -100.0);
-                self.state
-                    .as_mut()
-                    .unwrap()
-                    .camera
-                    .set_target(player.position());
             }
             PhysicalKey::Code(KeyCode::KeyD) => {
                 let player = &mut self.game.entities[1];
-                let camera = &mut self.state.as_mut().unwrap().camera;
                 player.move_z(dt, 100.0);
-                camera.strafe(dt, 100.0);
-                //let player_position = player.position();
-                //let mut camera_position = camera.position();
-
-                //println!("{player_position:?}, {camera_position:?}",);
-
-                // camera.set_position(camera_position);
-                //camera.set_target(player_position);
             }
             PhysicalKey::Code(KeyCode::Space) => {
                 let player = &mut self.game.entities[1];
-                player.move_y(dt, 100.0);
-                self.state
-                    .as_mut()
-                    .unwrap()
-                    .camera
-                    .set_target(player.position());
+                player.jump(dt, 1000.0);
             }
             _ => {}
         }
