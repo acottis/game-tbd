@@ -62,44 +62,61 @@ impl App {
     }
 
     fn handle_key(&mut self, event_loop: &ActiveEventLoop, event: &KeyEvent) {
+        let dt = self.delta_time;
         match event.physical_key {
             PhysicalKey::Code(KeyCode::Escape) => event_loop.exit(),
             PhysicalKey::Code(KeyCode::ArrowLeft) => {
-                self.state().camera.strafe(-0.01);
+                self.state().camera.strafe(dt, -10.0)
             }
             PhysicalKey::Code(KeyCode::ArrowRight) => {
-                self.state().camera.strafe(0.01);
+                self.state().camera.strafe(dt, 10.0)
             }
             PhysicalKey::Code(KeyCode::ArrowUp) => {
-                self.state().camera.forward(0.1);
+                self.state().camera.forward(dt, 100.0)
             }
             PhysicalKey::Code(KeyCode::ArrowDown) => {
-                self.state().camera.forward(-0.1);
+                self.state().camera.forward(dt, -100.0)
             }
             PhysicalKey::Code(KeyCode::KeyH) => {
-                self.state().camera.rotate_y(PI / 16.0);
+                self.state().camera.rotate_y(PI / 16.0)
             }
             PhysicalKey::Code(KeyCode::KeyK) => {
-                self.state().camera.rotate_y(-PI / 16.0);
+                self.state().camera.rotate_y(-PI / 16.0)
             }
             PhysicalKey::Code(KeyCode::KeyU) => {
-                self.state().camera.rotate_x(PI / 16.0);
+                self.state().camera.rotate_x(PI / 16.0)
             }
             PhysicalKey::Code(KeyCode::KeyJ) => {
-                self.state().camera.rotate_x(-PI / 16.0);
+                self.state().camera.rotate_x(-PI / 16.0)
+            }
+            PhysicalKey::Code(KeyCode::KeyW) => {
+                self.game.entities[1].move_x(dt, 100.0)
+            }
+            PhysicalKey::Code(KeyCode::KeyA) => {
+                self.game.entities[1].move_z(dt, -100.0)
+            }
+            PhysicalKey::Code(KeyCode::KeyS) => {
+                self.game.entities[1].move_x(dt, -100.0)
+            }
+            PhysicalKey::Code(KeyCode::KeyD) => {
+                self.game.entities[1].move_z(dt, 100.0)
+            }
+            PhysicalKey::Code(KeyCode::Space) => {
+                self.game.entities[1].move_y(dt, 100.0)
             }
             _ => {}
         }
     }
 
     fn handle_scroll(&mut self, delta: MouseScrollDelta) {
+        let dt = self.delta_time;
         match delta {
             MouseScrollDelta::LineDelta(_, direction) => {
                 if direction == -1.0 {
-                    self.state().camera.forward(-0.4);
+                    self.state().camera.forward(dt, -100.0);
                 }
                 if direction == 1.0 {
-                    self.state().camera.forward(0.4);
+                    self.state().camera.forward(dt, 100.0);
                 }
             }
             MouseScrollDelta::PixelDelta(_) => (),
@@ -120,7 +137,7 @@ impl ApplicationHandler for App {
         self.delta_time =
             now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
-        //println!("FPS: {}", 1.0 / self.delta_time);
+        println!("FPS: {}", 1.0 / self.delta_time);
         //println!("FPS: {}", self.delta_time);
 
         self.game.update(self.delta_time);

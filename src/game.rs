@@ -24,6 +24,16 @@ impl Entity {
         }
     }
 
+    pub fn move_x(&mut self, delta_time: f32, x: f32) {
+        self.position.x += x * delta_time;
+    }
+    pub fn move_y(&mut self, delta_time: f32, y: f32) {
+        self.position.y += y * delta_time;
+    }
+    pub fn move_z(&mut self, delta_time: f32, z: f32) {
+        self.position.z += z * delta_time;
+    }
+
     pub fn transform(&self) -> Mat4 {
         Mat4::from_translation(self.position) * Mat4::from_scaling(self.scale)
     }
@@ -56,20 +66,13 @@ impl Game {
             false,
         );
         let cube1 = Entity::new(
-            Vec3::new(-1.0, 3.0, 0.0),
-            Vec3::xyz(0.3),
-            state.gpu.get_mesh(MeshId::Cube),
-            true,
-        );
-        let cube2 = Entity::new(
-            Vec3::new(1.0, 3.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
             Vec3::xyz(0.3),
             state.gpu.get_mesh(MeshId::Cube),
             true,
         );
 
         self.entities.push(ground);
-        self.entities.push(cube2);
         self.entities.push(cube1);
     }
 
