@@ -8,7 +8,7 @@ use wgpu::{
 
 use crate::{
     game::Entity,
-    math::{Mat4, Vec3},
+    maths::{Mat4, Vec3},
 };
 
 use super::{Camera, Light, MeshId, assets};

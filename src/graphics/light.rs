@@ -1,7 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 
-use crate::math::Vec3;
-
+use crate::maths::Vec3;
 
 #[derive(Zeroable, Pod, Copy, Clone)]
 #[repr(C)]

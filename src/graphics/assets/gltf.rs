@@ -4,7 +4,7 @@ use gltf::{Document, Node, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
-use crate::{graphics::Vertex, math::Vec3};
+use crate::{graphics::Vertex, maths::Vec3};
 
 fn load_texture(
     info: Option<Info>,

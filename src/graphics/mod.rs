@@ -5,7 +5,7 @@ use assets::load_glb;
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::{game::Entity, math::Vec3};
+use crate::{game::Entity, maths::Vec3};
 
 mod assets;
 mod camera;

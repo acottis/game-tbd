@@ -1,5 +1,5 @@
 use crate::graphics::{MeshId, MeshInstance, State};
-use crate::math::{Mat4, Vec3};
+use crate::maths::{Mat4, Vec3};
 use crate::physics::GRAVITY;
 
 pub struct Entity {

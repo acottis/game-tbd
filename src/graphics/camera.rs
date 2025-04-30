@@ -2,7 +2,7 @@ use std::f32::consts::PI;
 
 use winit::dpi::PhysicalSize;
 
-use crate::math::{Mat3, Mat4, Vec3, Vec4};
+use crate::maths::{Mat3, Mat4, Vec3, Vec4};
 
 #[derive(Debug)]
 pub struct Camera {
