@@ -121,8 +121,8 @@ impl App {
         self.delta_time =
             now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
-        //println!("FPS: {}", 1.0 / self.delta_time);
-        //println!("FPS: {}", self.delta_time);
+        println!("FPS: {}", 1.0 / self.delta_time);
+        //println!("DT: {}", self.delta_time);
     }
 }
 
