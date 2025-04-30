@@ -1,3 +1,5 @@
+//! Column Major
+
 use bytemuck::{Pod, Zeroable};
 
 #[derive(Debug)]
@@ -47,7 +49,7 @@ pub struct Mat4 {
 }
 
 impl Mat4 {
-    pub fn identity() -> Self {
+    pub const fn identity() -> Self {
         Self {
             x: Vec4::new(1.0, 0.0, 0.0, 0.0),
             y: Vec4::new(0.0, 1.0, 0.0, 0.0),
@@ -55,7 +57,7 @@ impl Mat4 {
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
-    pub fn from_translation(translation: Vec3) -> Self {
+    pub const fn from_translation(translation: Vec3) -> Self {
         Self {
             x: Vec4::new(1.0, 0.0, 0.0, 0.0),
             y: Vec4::new(0.0, 1.0, 0.0, 0.0),
@@ -63,7 +65,7 @@ impl Mat4 {
             w: Vec4::new(translation.x, translation.y, translation.z, 1.0),
         }
     }
-    pub fn from_scaling(scale: Vec3) -> Self {
+    pub const fn from_scaling(scale: Vec3) -> Self {
         Self {
             x: Vec4::new(scale.x, 0.0, 0.0, 0.0),
             y: Vec4::new(0.0, scale.y, 0.0, 0.0),
@@ -71,7 +73,7 @@ impl Mat4 {
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
-    pub fn transpose(self) -> Mat4 {
+    pub const fn transpose(self) -> Mat4 {
         Mat4 {
             x: Vec4::new(self.x.x, self.y.x, self.z.x, self.w.x),
             y: Vec4::new(self.x.y, self.y.y, self.z.y, self.w.y),
@@ -216,12 +218,12 @@ impl core::ops::Div<f32> for &Vec3 {
 impl core::ops::Mul<Vec3> for Mat3 {
     type Output = Vec3;
 
-    fn mul(self, rhs: Vec3) -> Self::Output {
-        let x = self.x.x * rhs.x + self.y.x * rhs.y + self.z.x * rhs.z;
-        let y = self.x.y * rhs.x + self.y.y * rhs.y + self.z.y * rhs.z;
-        let z = self.x.z * rhs.x + self.y.z * rhs.y + self.z.z * rhs.z;
-
-        Vec3 { x, y, z }
+    fn mul(self, rhs: Vec3) -> Vec3 {
+        Vec3 {
+            x: self.x.x * rhs.x + self.y.x * rhs.y + self.z.x * rhs.z,
+            y: self.x.y * rhs.x + self.y.y * rhs.y + self.z.y * rhs.z,
+            z: self.x.z * rhs.x + self.y.z * rhs.y + self.z.z * rhs.z,
+        }
     }
 }
 impl core::ops::Add for Vec3 {

@@ -23,7 +23,9 @@ impl Entity {
             mesh,
         }
     }
-
+    pub fn position(&self) -> Vec3 {
+        self.position
+    }
     pub fn move_x(&mut self, delta_time: f32, x: f32) {
         self.position.x += x * delta_time;
     }

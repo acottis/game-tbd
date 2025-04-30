@@ -90,19 +90,53 @@ impl App {
                 self.state().camera.rotate_x(-PI / 16.0)
             }
             PhysicalKey::Code(KeyCode::KeyW) => {
-                self.game.entities[1].move_x(dt, 100.0)
+                let player = &mut self.game.entities[1];
+                player.move_x(dt, 100.0);
+                self.state
+                    .as_mut()
+                    .unwrap()
+                    .camera
+                    .set_target(player.position());
             }
             PhysicalKey::Code(KeyCode::KeyA) => {
-                self.game.entities[1].move_z(dt, -100.0)
+                let player = &mut self.game.entities[1];
+                player.move_z(dt, -100.0);
+                self.state
+                    .as_mut()
+                    .unwrap()
+                    .camera
+                    .set_target(player.position());
             }
             PhysicalKey::Code(KeyCode::KeyS) => {
-                self.game.entities[1].move_x(dt, -100.0)
+                let player = &mut self.game.entities[1];
+                player.move_x(dt, -100.0);
+                self.state
+                    .as_mut()
+                    .unwrap()
+                    .camera
+                    .set_target(player.position());
             }
             PhysicalKey::Code(KeyCode::KeyD) => {
-                self.game.entities[1].move_z(dt, 100.0)
+                let player = &mut self.game.entities[1];
+                let camera = &mut self.state.as_mut().unwrap().camera;
+                player.move_z(dt, 100.0);
+                camera.strafe(dt, 100.0);
+                //let player_position = player.position();
+                //let mut camera_position = camera.position();
+
+                //println!("{player_position:?}, {camera_position:?}",);
+
+                // camera.set_position(camera_position);
+                //camera.set_target(player_position);
             }
             PhysicalKey::Code(KeyCode::Space) => {
-                self.game.entities[1].move_y(dt, 100.0)
+                let player = &mut self.game.entities[1];
+                player.move_y(dt, 100.0);
+                self.state
+                    .as_mut()
+                    .unwrap()
+                    .camera
+                    .set_target(player.position());
             }
             _ => {}
         }
@@ -137,7 +171,7 @@ impl ApplicationHandler for App {
         self.delta_time =
             now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
-        println!("FPS: {}", 1.0 / self.delta_time);
+        //println!("FPS: {}", 1.0 / self.delta_time);
         //println!("FPS: {}", self.delta_time);
 
         self.game.update(self.delta_time);

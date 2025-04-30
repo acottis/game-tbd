@@ -21,7 +21,7 @@ pub struct Camera {
 impl Camera {
     pub const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(-0.3, 0.1, 0.0),
+            position: Vec3::new(-0.3, 0.2, 0.0),
             target: Vec3::new(0.0, 0.0, 0.0),
             up: Vec3::new(0.0, 1.0, 0.0),
             fovy: PI / 4.0,
@@ -29,6 +29,18 @@ impl Camera {
             near: 0.1,
             far: 1000.0,
         }
+    }
+    pub fn set_target(&mut self, target: Vec3) {
+        self.target = target;
+    }
+    pub fn set_position(&mut self, position: Vec3) {
+        self.position = position;
+    }
+    pub fn position(&self) -> Vec3 {
+        self.position
+    }
+    pub fn target(&self) -> Vec3 {
+        self.target
     }
     pub fn rotate_x(&mut self, theta: f32) {
         self.position = Mat3::rotation_x(theta) * self.position;
@@ -38,7 +50,6 @@ impl Camera {
     }
     pub fn forward(&mut self, delta_time: f32, speed: f32) {
         let forward = (self.target - self.position).normalise();
-
         self.position += forward * speed * delta_time;
     }
     /// + is right
@@ -46,6 +57,7 @@ impl Camera {
     pub fn strafe(&mut self, delta_time: f32, speed: f32) {
         let forward = (self.target - self.position).normalise();
         let right = forward.cross(&self.up).normalise();
+        let right = self.up.cross(&forward).normalise();
         let delta = right * speed * delta_time;
 
         self.position += delta;
