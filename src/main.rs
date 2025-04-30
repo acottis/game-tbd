@@ -59,10 +59,9 @@ impl App {
 
     #[inline(always)]
     fn resize(&mut self, size: PhysicalSize<u32>) {
-        if size.width * size.height == 0 {
-            return;
+        if size.width * size.height != 0 {
+            self.state().resize(size);
         }
-        self.state().resize(size);
     }
 
     fn run_input(&mut self, event_loop: &ActiveEventLoop) {
