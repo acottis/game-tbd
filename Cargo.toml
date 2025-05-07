@@ -18,3 +18,7 @@ wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "vulk
 [target.'cfg(target_os = "windows")'.dependencies]
 winit = { version = "0.30.9", default-features = false, features = ["rwh_06"] }
 wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "dx12", "vulkan"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+winit = { version = "0.30.9", default-features = false, features = ["rwh_06"] }
+wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "metal"] }
