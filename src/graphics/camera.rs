@@ -46,7 +46,6 @@ impl Camera {
         let offset = target - self.target;
         self.target = target;
         self.position = self.position + offset;
-        println!("T:{:?}\nP:{:?}", self.target, self.position);
     }
     pub fn rotate_x(&mut self, delta_time: f32, theta: f32) {
         self.position = Mat3::rotation_x(theta * delta_time) * self.position;

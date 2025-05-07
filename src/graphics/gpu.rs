@@ -103,7 +103,7 @@ impl Gpu {
                 cache: None,
             });
 
-        println!("{:#?}", adapter.get_info());
+        log::info!("{:#?}", adapter.get_info());
 
         Self {
             surface,

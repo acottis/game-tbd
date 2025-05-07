@@ -120,8 +120,7 @@ impl App {
         self.delta_time =
             now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
-        //println!("FPS: {}", 1.0 / self.delta_time);
-        //println!("DT: {}", self.delta_time);
+        log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
     }
 }
 
@@ -178,7 +177,7 @@ impl ApplicationHandler for App {
             // Ignored events
             WindowEvent::Moved(_) => {}
             WindowEvent::CursorMoved { .. } => {}
-            _ => println!("{event:?}"),
+            _ => log::info!("{event:?}"),
         };
     }
 }
