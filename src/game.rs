@@ -35,6 +35,9 @@ impl Entity {
     pub const fn move_z(&mut self, delta_time: f32, z: f32) {
         self.position.z += z * delta_time;
     }
+    pub fn move_direction(&mut self, delta_time: f32, speed: f32, direction: Vec3) {
+        self.position += direction * speed * delta_time;
+    }
 
     pub const fn jump(&mut self, delta_time: f32, y: f32) {
         if self.falling {
