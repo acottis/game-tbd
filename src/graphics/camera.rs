@@ -113,20 +113,24 @@ impl Camera {
     }
 
     fn perspective_rh(&self) -> Mat4 {
-        let tan_half_fov = 1.0 / (self.fovy / 2.0).tan();
+        let f = 1.0 / (self.fovy * 0.5).tan();
+
         let range = self.far - self.near;
-        let depth = -(self.far + self.near) / range;
-        let project = -(2.0 * self.far * self.near) / range;
+
+        let a = -self.far / range;
+        let b = -(self.far * self.near) / range;
+
         Mat4 {
-            x: Vec4::new(tan_half_fov / self.aspect, 0.0, 0.0, 0.0),
-            y: Vec4::new(0.0, tan_half_fov, 0.0, 0.0),
-            z: Vec4::new(0.0, 0.0, depth, -1.0),
-            w: Vec4::new(0.0, 0.0, project, 0.0),
+            x: Vec4::new(f / self.aspect, 0.0, 0.0, 0.0),
+            y: Vec4::new(0.0, f, 0.0, 0.0),
+            z: Vec4::new(0.0, 0.0, a, -1.0),
+            w: Vec4::new(0.0, 0.0, b, 0.0),
         }
     }
 
     pub fn view_perspective_rh(&self) -> Mat4 {
-        self.view_rh() * self.perspective_rh()
+        // self.view_rh() * self.perspective_rh()
+        self.perspective_rh() * self.view_rh()
     }
 
     pub fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {

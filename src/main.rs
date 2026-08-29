@@ -116,7 +116,7 @@ impl App {
         if self.input.is_pressed(KeyCode::Escape) {
             event_loop.exit();
         }
-        player.move_direction(self.delta_time, 1.0, movement);
+        player.move_direction(self.delta_time, 5.0, movement);
         let mut target = player.position();
         target.y = 0.;
 

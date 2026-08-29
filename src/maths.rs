@@ -75,50 +75,35 @@ impl Mat4 {
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
-    pub const fn transpose(self) -> Mat4 {
-        Mat4 {
-            x: Vec4::new(self.x.x, self.y.x, self.z.x, self.w.x),
-            y: Vec4::new(self.x.y, self.y.y, self.z.y, self.w.y),
-            z: Vec4::new(self.x.z, self.y.z, self.z.z, self.w.z),
-            w: Vec4::new(self.x.w, self.y.w, self.z.w, self.w.w),
-        }
+}
+
+impl std::ops::Mul<Vec4> for Mat4 {
+    type Output = Vec4;
+
+    #[inline(always)]
+    fn mul(self, v: Vec4) -> Vec4 {
+        Vec4::new(
+            self.x.x * v.x + self.y.x * v.y + self.z.x * v.z + self.w.x * v.w,
+            self.x.y * v.x + self.y.y * v.y + self.z.y * v.z + self.w.y * v.w,
+            self.x.z * v.x + self.y.z * v.y + self.z.z * v.z + self.w.z * v.w,
+            self.x.w * v.x + self.y.w * v.y + self.z.w * v.z + self.w.w * v.w,
+        )
     }
 }
 
 impl std::ops::Mul<Mat4> for Mat4 {
     type Output = Self;
 
+    #[inline(always)]
     fn mul(self, rhs: Mat4) -> Self {
-        let rhs = rhs.transpose();
         Self {
-            x: Vec4 {
-                x: self.x.dot(rhs.x),
-                y: self.x.dot(rhs.y),
-                z: self.x.dot(rhs.z),
-                w: self.x.dot(rhs.w),
-            },
-            y: Vec4 {
-                x: self.y.dot(rhs.x),
-                y: self.y.dot(rhs.y),
-                z: self.y.dot(rhs.z),
-                w: self.y.dot(rhs.w),
-            },
-            z: Vec4 {
-                x: self.z.dot(rhs.x),
-                y: self.z.dot(rhs.y),
-                z: self.z.dot(rhs.z),
-                w: self.z.dot(rhs.w),
-            },
-            w: Vec4 {
-                x: self.w.dot(rhs.x),
-                y: self.w.dot(rhs.y),
-                z: self.w.dot(rhs.z),
-                w: self.w.dot(rhs.w),
-            },
+            x: self * rhs.x,
+            y: self * rhs.y,
+            z: self * rhs.z,
+            w: self * rhs.w,
         }
     }
 }
-
 #[derive(Pod, Zeroable, Copy, Clone, Default, Debug, PartialEq)]
 #[repr(C)]
 pub struct Vec4 {
@@ -131,9 +116,6 @@ pub struct Vec4 {
 impl Vec4 {
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
-    }
-    pub const fn dot(&self, rhs: Self) -> f32 {
-        (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z) + (self.w * rhs.w)
     }
 }
 
@@ -330,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn test_row_major_matrix_multiplication() {
+    fn test_col_major_matrix_multiplication() {
         let mat_a = Mat4 {
             x: Vec4::new(1.0, 2.0, 3.0, 4.0),
             y: Vec4::new(5.0, 6.0, 7.0, 8.0),
@@ -339,19 +321,19 @@ mod tests {
         };
 
         let mat_b = Mat4 {
-            x: Vec4::new(1.0, 0.0, 0.0, 1.0),
-            y: Vec4::new(0.0, 1.0, 0.0, 0.0),
-            z: Vec4::new(0.0, 0.0, 1.0, 0.0),
-            w: Vec4::new(0.0, 0.0, 0.0, 1.0),
+            x: Vec4::new(2.0, 0.0, 1.0, 3.0),
+            y: Vec4::new(1.0, -1.0, 0.0, 2.0),
+            z: Vec4::new(0.0, 3.0, 2.0, 1.0),
+            w: Vec4::new(1.0, 1.0, 0.0, 0.0),
         };
 
         let result = mat_a * mat_b;
 
         let expected = Mat4 {
-            x: Vec4::new(1.0, 2.0, 3.0, 5.0),
-            y: Vec4::new(5.0, 6.0, 7.0, 13.0),
-            z: Vec4::new(9.0, 10.0, 11.0, 21.0),
-            w: Vec4::new(13.0, 14.0, 15.0, 29.0),
+            x: Vec4::new(50.0, 56.0, 62.0, 68.0),
+            y: Vec4::new(22.0, 24.0, 26.0, 28.0),
+            z: Vec4::new(46.0, 52.0, 58.0, 64.0),
+            w: Vec4::new(6.0, 8.0, 10.0, 12.0),
         };
 
         assert_eq!(result, expected);
