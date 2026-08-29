@@ -1,4 +1,7 @@
-use std::{f32::consts::PI, time::Instant};
+use std::{
+    f32::consts::PI,
+    time::{Duration, Instant},
+};
 
 use game::Game;
 use input::Input;
@@ -109,17 +112,12 @@ impl App {
         if self.input.is_pressed(KeyCode::Escape) {
             event_loop.exit();
         }
+        camera.follow(player.position());
+        // println!("{camera:?} {:?}", player.position());
     }
 
     fn run_game(&mut self) {
         self.game.update(self.delta_time);
-    }
-
-    fn update_delta_time(&mut self) {
-        let now = Instant::now();
-        self.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();
-        self.last_frame_time = now;
-        log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
     }
 }
 
@@ -131,7 +129,14 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        self.update_delta_time();
+        let now = Instant::now();
+        // if now.duration_since(self.last_frame_time) <= Duration::from_millis(1000 / 5) {
+        //     return;
+        // }
+        self.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();
+        log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
+        self.last_frame_time = now;
+
         self.run_input(event_loop);
         self.run_game();
         self.render();
@@ -150,20 +155,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(_, direction) => {
-                    if direction == -1.0 {
-                        self.state
-                            .as_mut()
-                            .unwrap()
-                            .camera
-                            .forward(self.delta_time, -1000.0);
-                    }
-                    if direction == 1.0 {
-                        self.state
-                            .as_mut()
-                            .unwrap()
-                            .camera
-                            .forward(self.delta_time, 1000.0);
-                    }
+                    self.state.as_mut().unwrap().camera.zoom(direction);
                 }
                 MouseScrollDelta::PixelDelta(_) => (),
             },
