@@ -89,36 +89,38 @@ impl App {
         if self.input.is_pressed(KeyCode::Space) {
             player.jump(self.delta_time, 2000.0);
         }
-        if self.input.is_pressed(KeyCode::ArrowUp) {
-            camera.move_forward(self.delta_time, 10.0)
-        }
-        if self.input.is_pressed(KeyCode::ArrowLeft) {
-            camera.strafe(self.delta_time, -10.0);
-        }
-        if self.input.is_pressed(KeyCode::ArrowDown) {
-            camera.move_forward(self.delta_time, -10.0)
-        }
-        if self.input.is_pressed(KeyCode::ArrowRight) {
-            camera.strafe(self.delta_time, 10.0);
-        }
-        if self.input.is_pressed(KeyCode::KeyU) {
-            camera.rotate_z(self.delta_time, PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::KeyH) {
-            camera.rotate_y(self.delta_time, -PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::KeyJ) {
-            camera.rotate_z(self.delta_time, -PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::KeyK) {
-            camera.rotate_y(self.delta_time, PI / 2.0)
-        }
+        // if self.input.is_pressed(KeyCode::ArrowUp) {
+        //     camera.move_forward(self.delta_time, 10.0)
+        // }
+        // if self.input.is_pressed(KeyCode::ArrowLeft) {
+        //     camera.strafe(self.delta_time, -10.0);
+        // }
+        // if self.input.is_pressed(KeyCode::ArrowDown) {
+        //     camera.move_forward(self.delta_time, -10.0)
+        // }
+        // if self.input.is_pressed(KeyCode::ArrowRight) {
+        //     camera.strafe(self.delta_time, 10.0);
+        // }
+        // if self.input.is_pressed(KeyCode::KeyU) {
+        //     camera.rotate_z(self.delta_time, PI / 2.0)
+        // }
+        // if self.input.is_pressed(KeyCode::KeyH) {
+        //     camera.rotate_y(self.delta_time, -PI / 2.0)
+        // }
+        // if self.input.is_pressed(KeyCode::KeyJ) {
+        //     camera.rotate_z(self.delta_time, -PI / 2.0)
+        // }
+        // if self.input.is_pressed(KeyCode::KeyK) {
+        //     camera.rotate_y(self.delta_time, PI / 2.0)
+        // }
         if self.input.is_pressed(KeyCode::Escape) {
             event_loop.exit();
         }
-        // camera.follow(player.position());
-        player.move_direction(self.delta_time, 5.0, movement);
-        // println!("{camera:?} {:?}", player.position());
+        player.move_direction(self.delta_time, 1.0, movement);
+        let mut target = player.position();
+        target.y = 0.;
+
+        camera.follow(target);
     }
 
     fn run_game(&mut self) {
@@ -135,7 +137,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
-        // if now.duration_since(self.last_frame_time) <= Duration::from_millis(1000 / 5) {
+        // if now.duration_since(self.last_frame_time) <= Duration::from_millis(1000 / 10) {
         //     return;
         // }
         self.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();

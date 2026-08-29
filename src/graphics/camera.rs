@@ -32,9 +32,14 @@ impl Camera {
     }
 
     pub fn follow(&mut self, target: Vec3) {
-        self.target = target;
-    }
+        let old_target = self.target;
+        let old_position = self.position;
 
+        let offset = old_position - old_target;
+
+        self.target = target;
+        self.position = target + offset;
+    }
     pub fn forward_direction(&self) -> Vec3 {
         let mut forward = self.target - self.position;
         forward.y = 0.0;
@@ -45,49 +50,49 @@ impl Camera {
         forward.cross(&self.up).normalise()
     }
 
-    pub fn rotate_x(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::rotation_x(theta * delta_time);
-        let offset = self.position - self.target;
+    // pub fn rotate_x(&mut self, delta_time: f32, theta: f32) {
+    //     let rotation = Mat3::rotation_x(theta * delta_time);
+    //     let offset = self.position - self.target;
 
-        self.position = self.target + rotation * offset;
-    }
+    //     self.position = self.target + rotation * offset;
+    // }
 
-    pub fn rotate_y(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::rotation_y(theta * delta_time);
-        let offset = self.position - self.target;
+    // pub fn rotate_y(&mut self, delta_time: f32, theta: f32) {
+    //     let rotation = Mat3::rotation_y(theta * delta_time);
+    //     let offset = self.position - self.target;
 
-        self.position = self.target + rotation * offset;
-    }
+    //     self.position = self.target + rotation * offset;
+    // }
 
-    pub fn rotate_z(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::rotation_z(theta * delta_time);
-        let offset = self.position - self.target;
+    // pub fn rotate_z(&mut self, delta_time: f32, theta: f32) {
+    //     let rotation = Mat3::rotation_z(theta * delta_time);
+    //     let offset = self.position - self.target;
 
-        self.position = self.target + rotation * offset;
-    }
+    //     self.position = self.target + rotation * offset;
+    // }
 
-    pub fn move_forward(&mut self, delta_time: f32, speed: f32) {
-        let forward = (self.target - self.position).normalise();
-        self.position += forward * speed * delta_time;
-    }
+    // pub fn move_forward(&mut self, delta_time: f32, speed: f32) {
+    //     let forward = (self.target - self.position).normalise();
+    //     self.position += forward * speed * delta_time;
+    // }
+
+    // /// + is right, - is left
+    // pub fn strafe(&mut self, delta_time: f32, speed: f32) {
+    //     let forward = (self.target - self.position).normalise();
+    //     let right = forward.cross(&self.up).normalise();
+    //     //let right = self.up.cross(&forward).normalise();
+
+    //     let delta = right * speed * delta_time;
+
+    //     self.position += delta;
+    //     self.target += delta;
+    // }
 
     pub fn zoom(&mut self, amount: f32) {
         let offset = self.position - self.target;
         let direction = offset.normalise();
 
         self.position -= direction * amount;
-    }
-
-    /// + is right, - is left
-    pub fn strafe(&mut self, delta_time: f32, speed: f32) {
-        let forward = (self.target - self.position).normalise();
-        let right = forward.cross(&self.up).normalise();
-        //let right = self.up.cross(&forward).normalise();
-
-        let delta = right * speed * delta_time;
-
-        self.position += delta;
-        self.target += delta;
     }
 
     fn view_rh(&self) -> Mat4 {

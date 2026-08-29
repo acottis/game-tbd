@@ -88,7 +88,7 @@ impl Mat4 {
 impl std::ops::Mul<Mat4> for Mat4 {
     type Output = Self;
 
-    fn mul(self, rhs: Mat4) -> Self::Output {
+    fn mul(self, rhs: Mat4) -> Self {
         let rhs = rhs.transpose();
         Self {
             x: Vec4 {
