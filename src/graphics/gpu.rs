@@ -224,7 +224,7 @@ impl Gpu {
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             contents: bytes_of(&Mat4::identity()),
         });
-        let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+        let transform_bind_group = self.device.create_bind_group(&BindGroupDescriptor {
             label: Some("Transform"),
             layout: &self.transform_layout,
             entries: &[BindGroupEntry {
@@ -236,7 +236,7 @@ impl Gpu {
         MeshInstance {
             mesh: self.mesh_from_id(mesh),
             transform,
-            bind_group,
+            transform_bind_group,
         }
     }
 
@@ -253,7 +253,7 @@ impl Gpu {
             .write_buffer(&self.camera_buffer, 0, bytes_of(camera));
     }
 
-    pub fn render(&mut self, entities: &Vec<Entity>) -> SurfaceTexture {
+    pub fn render(&mut self, entities: &[Entity]) -> SurfaceTexture {
         let frame = self.surface.get_current_texture().unwrap();
         let view = &frame.texture.create_view(&Default::default());
 
@@ -290,7 +290,7 @@ impl Gpu {
                     .write_buffer(&entity.mesh.transform, 0, bytes_of(&transform));
 
                 render_pass.set_bind_group(2, &entity.mesh.mesh.bind_group, &[]);
-                render_pass.set_bind_group(3, &entity.mesh.bind_group, &[]);
+                render_pass.set_bind_group(3, &entity.mesh.transform_bind_group, &[]);
 
                 render_pass.set_vertex_buffer(0, entity.mesh.mesh.vertex.slice(..));
 
@@ -447,7 +447,7 @@ async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter,
 pub struct MeshInstance {
     mesh: Rc<Mesh>,
     transform: Buffer,
-    bind_group: BindGroup,
+    transform_bind_group: BindGroup,
 }
 
 pub struct Mesh {

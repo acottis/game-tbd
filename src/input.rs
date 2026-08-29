@@ -16,6 +16,7 @@ impl Input {
         }
     }
 
+    /// TODO: Change to fixed size array with booleans and indices
     pub fn handle_keyboard(&mut self, event: &KeyEvent) {
         if event.state.is_pressed() {
             self.held_keys.insert(event.physical_key);

@@ -73,7 +73,7 @@ impl Game {
             false,
         );
         let cube1 = Entity::new(
-            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::zeroes(),
             Vec3::xyz(0.3),
             state.gpu.get_mesh(MeshId::Cube),
             true,

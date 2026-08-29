@@ -155,14 +155,14 @@ impl ApplicationHandler for App {
                             .as_mut()
                             .unwrap()
                             .camera
-                            .forward(self.delta_time, -100.0);
+                            .forward(self.delta_time, -1000.0);
                     }
                     if direction == 1.0 {
                         self.state
                             .as_mut()
                             .unwrap()
                             .camera
-                            .forward(self.delta_time, 100.0);
+                            .forward(self.delta_time, 1000.0);
                     }
                 }
                 MouseScrollDelta::PixelDelta(_) => (),

@@ -28,7 +28,7 @@ impl State {
         let window_size = window.inner_size();
 
         let camera = Camera::new(&window_size);
-        let light = Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 0.0), 0.75);
+        let light = Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), 0.9);
 
         let gpu = Gpu::new(
             window.clone(),
