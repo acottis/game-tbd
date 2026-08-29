@@ -2,18 +2,13 @@ mod gltf;
 
 use image::DynamicImage;
 
-pub use gltf::load_glb;
+pub use gltf::load_mesh;
 
 use super::{Vertex, gpu::MaterialUniform};
 
 impl From<&Material> for MaterialUniform {
     fn from(m: &Material) -> Self {
-        MaterialUniform::new(
-            m.base_colour,
-            m.metallic,
-            m.roughness,
-            m.image.is_some(),
-        )
+        MaterialUniform::new(m.base_colour, m.metallic, m.roughness, m.image.is_some())
     }
 }
 pub struct Material {
@@ -40,11 +35,7 @@ pub struct Mesh {
     pub material: Material,
 }
 impl Mesh {
-    pub fn new(
-        vertices: Vec<Vertex>,
-        indices: Vec<u32>,
-        material: Material,
-    ) -> Self {
+    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Material) -> Self {
         Self {
             vertices,
             indices,

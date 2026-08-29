@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use assets::load_glb;
+use assets::load_mesh;
 
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
@@ -28,11 +28,7 @@ impl State {
         let window_size = window.inner_size();
 
         let camera = Camera::new(&window_size);
-        let light = Light::new(
-            Vec3::new(0.0, 0.5, 0.5),
-            Vec3::new(1.0, 1.0, 0.0),
-            0.75,
-        );
+        let light = Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 0.0), 0.75);
 
         let gpu = Gpu::new(
             window.clone(),
@@ -65,9 +61,9 @@ impl State {
 
 pub fn load_assets() -> impl Iterator<Item = assets::Mesh> {
     [
-        load_glb("assets/BoxTextured.glb"),
-        load_glb("assets/cube.glb"),
-        load_glb("assets/ground.glb"),
+        load_mesh("assets/BoxTextured.glb"),
+        load_mesh("assets/cube.glb"),
+        load_mesh("assets/ground.glb"),
     ]
     .into_iter()
     .flatten()

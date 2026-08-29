@@ -1,22 +1,18 @@
 use std::path::Path;
 
-use gltf::{Document, Node, buffer::Data, image::Source, texture::Info};
+use gltf::{buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
 use crate::{graphics::Vertex, maths::Vec3};
 
-fn load_texture(
-    info: Option<Info>,
-    buffer: &Vec<Data>,
-) -> Option<DynamicImage> {
+fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> {
     if let Some(info) = info {
         let image = info.texture().source().source();
         match image {
             Source::View { view, mime_type } => {
                 let parent_buffer_data = &buffer[view.buffer().index()].0;
-                let data = &parent_buffer_data
-                    [view.offset()..view.offset() + view.length()];
+                let data = &parent_buffer_data[view.offset()..view.offset() + view.length()];
                 let mime_type = mime_type.replace('/', ".");
 
                 image::load_from_memory_with_format(
@@ -32,17 +28,12 @@ fn load_texture(
     }
 }
 
-fn process_node(
-    node: Node,
-    document: &Document,
-    buffer: &Vec<Data>,
-    models: &mut Vec<Mesh>,
-) {
-    for child in node.children() {
-        process_node(child, document, buffer, models);
-    }
+pub fn load_mesh(path: impl AsRef<Path>) -> Vec<Mesh> {
+    let (document, buffer, _image) = gltf::import(&path).unwrap();
 
-    if let Some(mesh) = node.mesh() {
+    let mut meshes = Vec::new();
+
+    for mesh in document.meshes() {
         for primitive in mesh.primitives() {
             let mut vertex_buffer = Vec::with_capacity(1000);
             let mut index_buffer = Vec::with_capacity(1000);
@@ -54,19 +45,11 @@ fn process_node(
             let uvs = reader.read_tex_coords(0).unwrap().into_f32();
             if let Some(normals) = reader.read_normals() {
                 for ((vertex, uv), normal) in vertices.zip(uvs).zip(normals) {
-                    vertex_buffer.push(Vertex::new(
-                        vertex.into(),
-                        normal.into(),
-                        uv,
-                    ));
+                    vertex_buffer.push(Vertex::new(vertex.into(), normal.into(), uv));
                 }
             } else {
                 for (vertex, uv) in vertices.zip(uvs) {
-                    vertex_buffer.push(Vertex::new(
-                        vertex.into(),
-                        Vec3::y(),
-                        uv,
-                    ))
+                    vertex_buffer.push(Vertex::new(vertex.into(), Vec3::y(), uv))
                 }
             }
 
@@ -82,7 +65,7 @@ fn process_node(
                     let base_colour = pbr.base_color_factor();
                     let metallic = pbr.metallic_factor();
                     let roughness = pbr.roughness_factor();
-                    let image = load_texture(pbr.base_color_texture(), buffer);
+                    let image = load_texture(pbr.base_color_texture(), &buffer);
 
                     Material {
                         base_colour,
@@ -93,23 +76,11 @@ fn process_node(
                 }
                 None => Material::default(),
             };
-            models.push(Mesh::new(vertex_buffer, index_buffer, material));
-        }
-    }
-}
-
-pub fn load_glb(path: impl AsRef<Path>) -> Vec<Mesh> {
-    let (document, buffer, _image) = gltf::import(&path).unwrap();
-
-    let mut models = Vec::new();
-
-    for scene in document.scenes() {
-        for node in scene.nodes() {
-            process_node(node, &document, &buffer, &mut models);
+            meshes.push(Mesh::new(vertex_buffer, index_buffer, material));
         }
     }
 
-    models
+    meshes
 }
 
 #[cfg(test)]
@@ -118,8 +89,8 @@ mod tests {
 
     #[test]
     fn foo() {
-        load_glb("assets/BoxTextured.glb");
-        load_glb("assets/cube.glb");
-        load_glb("assets/ground.glb");
+        load_mesh("assets/BoxTextured.glb");
+        load_mesh("assets/cube.glb");
+        load_mesh("assets/ground.glb");
     }
 }

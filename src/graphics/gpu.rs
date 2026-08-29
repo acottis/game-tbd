@@ -236,7 +236,6 @@ impl Gpu {
         MeshInstance {
             mesh: self.mesh_from_id(mesh),
             transform,
-
             bind_group,
         }
     }
