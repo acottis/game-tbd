@@ -117,8 +117,7 @@ impl App {
 
     fn update_delta_time(&mut self) {
         let now = Instant::now();
-        self.delta_time =
-            now.duration_since(self.last_frame_time).as_secs_f32();
+        self.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
         log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
     }
@@ -126,8 +125,7 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window_attributes =
-            Window::default_attributes().with_title("WIP: Game");
+        let window_attributes = Window::default_attributes().with_title("WIP: Game");
         let window = event_loop.create_window(window_attributes).unwrap();
         self.init(window);
     }
@@ -139,12 +137,7 @@ impl ApplicationHandler for App {
         self.render();
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        _: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {
                 self.resize(size);

@@ -36,72 +36,65 @@ impl Gpu {
         camera: &Camera,
         light: &Light,
     ) -> Self {
-        let instance =
-            Instance::new(&InstanceDescriptor::from_env_or_default());
+        let instance = Instance::new(&InstanceDescriptor::from_env_or_default());
         let surface = instance.create_surface(window).unwrap();
 
-        let (adapter, device, queue) =
-            pollster::block_on(init_wgpu(&instance, &surface));
+        let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
 
         let surface_config = surface
             .get_default_config(&adapter, window_width, window_height)
             .unwrap();
         surface.configure(&device, &surface_config);
 
-        let (camera_bind_group, camera_buffer, camera_layout) =
-            load_camera(&device, camera);
+        let (camera_bind_group, camera_buffer, camera_layout) = load_camera(&device, camera);
 
-        let (light_bind_group, _light_buffer, light_layout) =
-            load_light(&device, light);
+        let (light_bind_group, _light_buffer, light_layout) = load_light(&device, light);
 
         let texture_layout = texture_layout(&device);
         let transform_layout = transform_layout(&device);
 
-        let pipeline_layout =
-            device.create_pipeline_layout(&PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[
-                    &camera_layout,
-                    &light_layout,
-                    &texture_layout,
-                    &transform_layout,
-                ],
-                push_constant_ranges: &[],
-            });
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[
+                &camera_layout,
+                &light_layout,
+                &texture_layout,
+                &transform_layout,
+            ],
+            push_constant_ranges: &[],
+        });
 
-        let shader = device
-            .create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
 
-        let render_pipeline =
-            device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                vertex: VertexState {
-                    module: &shader,
-                    entry_point: None,
-                    compilation_options: Default::default(),
-                    buffers: &[Vertex::layout()],
-                },
-                fragment: Some(FragmentState {
-                    module: &shader,
-                    entry_point: None,
-                    compilation_options: Default::default(),
-                    targets: &[Some(surface_config.format.into())],
-                }),
-                primitive: PrimitiveState {
-                    topology: PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: FrontFace::Ccw,
-                    cull_mode: Some(Face::Back),
-                    unclipped_depth: false,
-                    polygon_mode: PolygonMode::Fill,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: MultisampleState::default(),
-                multiview: None,
-                cache: None,
-            });
+        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                buffers: &[Vertex::layout()],
+            },
+            fragment: Some(FragmentState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                targets: &[Some(surface_config.format.into())],
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                cull_mode: Some(Face::Back),
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
 
         log::info!("{:#?}", adapter.get_info());
 
@@ -128,9 +121,7 @@ impl Gpu {
     }
 
     pub fn load_meshes(&mut self, models: impl Iterator<Item = assets::Mesh>) {
-        models.for_each(|model| {
-            self.meshes.push(Rc::new(self.load_model(&model)))
-        })
+        models.for_each(|model| self.meshes.push(Rc::new(self.load_model(&model))))
     }
 
     fn load_model(&self, model: &assets::Mesh) -> Mesh {
@@ -148,12 +139,11 @@ impl Gpu {
         let sampler = self.device.create_sampler(&SamplerDescriptor::default());
 
         let material_uniform = MaterialUniform::from(&model.material);
-        let material_uniform_buffer =
-            self.device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                usage: BufferUsages::UNIFORM,
-                contents: bytes_of(&material_uniform),
-            });
+        let material_uniform_buffer = self.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            usage: BufferUsages::UNIFORM,
+            contents: bytes_of(&material_uniform),
+        });
 
         let texture_view = if let Some(ref image) = model.material.image {
             let image = image.to_rgba8();
@@ -284,8 +274,7 @@ impl Gpu {
             occlusion_query_set: None,
         };
 
-        let mut encoder =
-            self.device.create_command_encoder(&Default::default());
+        let mut encoder = self.device.create_command_encoder(&Default::default());
 
         // GPU work goes here
         {
@@ -296,26 +285,18 @@ impl Gpu {
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in entities {
-                entity.mesh.write_transform(&self.queue, entity.transform());
-                render_pass.set_bind_group(
-                    2,
-                    &entity.mesh.mesh.bind_group,
-                    &[],
-                );
+                let transform =
+                    Mat4::from_translation(entity.position()) * Mat4::from_scaling(entity.scale());
+                self.queue
+                    .write_buffer(&entity.mesh.transform, 0, bytes_of(&transform));
+
+                render_pass.set_bind_group(2, &entity.mesh.mesh.bind_group, &[]);
                 render_pass.set_bind_group(3, &entity.mesh.bind_group, &[]);
 
-                render_pass
-                    .set_vertex_buffer(0, entity.mesh.mesh.vertex.slice(..));
+                render_pass.set_vertex_buffer(0, entity.mesh.mesh.vertex.slice(..));
 
-                render_pass.set_index_buffer(
-                    entity.mesh.mesh.index.slice(..),
-                    IndexFormat::Uint32,
-                );
-                render_pass.draw_indexed(
-                    0..entity.mesh.mesh.indices_len,
-                    0,
-                    0..1,
-                );
+                render_pass.set_index_buffer(entity.mesh.mesh.index.slice(..), IndexFormat::Uint32);
+                render_pass.draw_indexed(0..entity.mesh.mesh.indices_len, 0, 0..1);
             }
         }
         self.queue.submit([encoder.finish()]);
@@ -323,10 +304,7 @@ impl Gpu {
     }
 }
 
-fn load_camera(
-    device: &Device,
-    camera: &Camera,
-) -> (BindGroup, Buffer, BindGroupLayout) {
+fn load_camera(device: &Device, camera: &Camera) -> (BindGroup, Buffer, BindGroupLayout) {
     let buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
         contents: bytes_of(&camera.view_perspective_rh()),
@@ -358,10 +336,7 @@ fn load_camera(
     (bind_group, buffer, layout)
 }
 
-fn load_light(
-    device: &Device,
-    light: &Light,
-) -> (BindGroup, Buffer, BindGroupLayout) {
+fn load_light(device: &Device, light: &Light) -> (BindGroup, Buffer, BindGroupLayout) {
     let buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Light"),
         contents: bytes_of(light),
@@ -448,10 +423,7 @@ fn transform_layout(device: &Device) -> BindGroupLayout {
     device.create_bind_group_layout(&transform_layout_descriptor)
 }
 
-async fn init_wgpu(
-    instance: &Instance,
-    surface: &Surface<'static>,
-) -> (Adapter, Device, Queue) {
+async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter, Device, Queue) {
     let adapter = instance
         .request_adapter(&RequestAdapterOptions {
             power_preference: Default::default(),
@@ -478,11 +450,6 @@ pub struct MeshInstance {
     transform: Buffer,
     bind_group: BindGroup,
 }
-impl MeshInstance {
-    fn write_transform(&self, queue: &Queue, matrix: Mat4) {
-        queue.write_buffer(&self.transform, 0, bytes_of(&matrix));
-    }
-}
 
 pub struct Mesh {
     vertex: Buffer,
@@ -501,12 +468,7 @@ pub struct MaterialUniform {
     _padding: [u8; 4],
 }
 impl MaterialUniform {
-    pub fn new(
-        base_colour: [f32; 4],
-        metallic: f32,
-        roughness: f32,
-        has_texture: bool,
-    ) -> Self {
+    pub fn new(base_colour: [f32; 4], metallic: f32, roughness: f32, has_texture: bool) -> Self {
         Self {
             base_colour,
             metallic,

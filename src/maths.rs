@@ -49,6 +49,7 @@ pub struct Mat4 {
 }
 
 impl Mat4 {
+    #[inline(always)]
     pub const fn identity() -> Self {
         Self {
             x: Vec4::new(1.0, 0.0, 0.0, 0.0),
@@ -57,7 +58,8 @@ impl Mat4 {
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
-    pub const fn from_translation(translation: Vec3) -> Self {
+    #[inline(always)]
+    pub fn from_translation(translation: Vec3) -> Self {
         Self {
             x: Vec4::new(1.0, 0.0, 0.0, 0.0),
             y: Vec4::new(0.0, 1.0, 0.0, 0.0),
@@ -131,10 +133,7 @@ impl Vec4 {
         Self { x, y, z, w }
     }
     pub const fn dot(&self, rhs: Self) -> f32 {
-        (self.x * rhs.x)
-            + (self.y * rhs.y)
-            + (self.z * rhs.z)
-            + (self.w * rhs.w)
+        (self.x * rhs.x) + (self.y * rhs.y) + (self.z * rhs.z) + (self.w * rhs.w)
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::graphics::{MeshId, MeshInstance, State};
-use crate::maths::{Mat4, Vec3};
+use crate::maths::Vec3;
 use crate::physics::GRAVITY;
 
 pub struct Entity {
@@ -11,12 +11,7 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn new(
-        position: Vec3,
-        scale: Vec3,
-        mesh: MeshInstance,
-        physics: bool,
-    ) -> Self {
+    pub fn new(position: Vec3, scale: Vec3, mesh: MeshInstance, physics: bool) -> Self {
         Self {
             position,
             scale,
@@ -27,6 +22,9 @@ impl Entity {
     }
     pub const fn position(&self) -> Vec3 {
         self.position
+    }
+    pub const fn scale(&self) -> Vec3 {
+        self.scale
     }
     pub const fn move_x(&mut self, delta_time: f32, x: f32) {
         self.position.x += x * delta_time;
@@ -44,10 +42,6 @@ impl Entity {
         };
         self.move_y(delta_time, y);
         self.falling = true
-    }
-
-    pub fn transform(&self) -> Mat4 {
-        Mat4::from_translation(self.position) * Mat4::from_scaling(self.scale)
     }
 
     const fn check_collision(&mut self) {
