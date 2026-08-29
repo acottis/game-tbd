@@ -53,9 +53,8 @@ impl State {
     pub fn render(&mut self, entities: &Vec<Entity>) {
         self.gpu.write_camera(&self.camera.view_perspective_rh());
 
-        let frame = self.gpu.render(entities);
+        self.gpu.render(entities, &self.window);
         self.window.pre_present_notify();
-        frame.present();
     }
 }
 

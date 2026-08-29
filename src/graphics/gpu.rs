@@ -5,6 +5,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt as _},
     *,
 };
+use winit::window::Window;
 
 use crate::{
     game::Entity,
@@ -36,7 +37,7 @@ impl Gpu {
         camera: &Camera,
         light: &Light,
     ) -> Self {
-        let instance = Instance::new(&InstanceDescriptor::from_env_or_default());
+        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance.create_surface(window).unwrap();
 
         let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
@@ -56,12 +57,12 @@ impl Gpu {
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[
-                &camera_layout,
-                &light_layout,
-                &texture_layout,
-                &transform_layout,
+                Some(&camera_layout),
+                Some(&light_layout),
+                Some(&texture_layout),
+                Some(&transform_layout),
             ],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         let shader = device.create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
@@ -73,7 +74,7 @@ impl Gpu {
                 module: &shader,
                 entry_point: None,
                 compilation_options: Default::default(),
-                buffers: &[Vertex::layout()],
+                buffers: &[Some(Vertex::layout())],
             },
             fragment: Some(FragmentState {
                 module: &shader,
@@ -92,8 +93,8 @@ impl Gpu {
             },
             depth_stencil: None,
             multisample: MultisampleState::default(),
-            multiview: None,
             cache: None,
+            multiview_mask: None,
         });
 
         log::info!("{:#?}", adapter.get_info());
@@ -253,8 +254,12 @@ impl Gpu {
             .write_buffer(&self.camera_buffer, 0, bytes_of(camera));
     }
 
-    pub fn render(&mut self, entities: &[Entity]) -> SurfaceTexture {
-        let frame = self.surface.get_current_texture().unwrap();
+    pub fn render(&mut self, entities: &[Entity], window: &Window) {
+        let frame = match self.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+            e => unimplemented!("{e:?}"),
+        };
         let view = &frame.texture.create_view(&Default::default());
 
         let render_pass_desc = RenderPassDescriptor {
@@ -267,10 +272,12 @@ impl Gpu {
                     // WARNING: This is important to vulkan but not dx12
                     store: StoreOp::Store,
                 },
+                depth_slice: None,
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         };
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
@@ -299,7 +306,8 @@ impl Gpu {
             }
         }
         self.queue.submit([encoder.finish()]);
-        frame
+        window.pre_present_notify();
+        self.queue.present(frame);
     }
 }
 
@@ -428,6 +436,7 @@ async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter,
             power_preference: Default::default(),
             force_fallback_adapter: Default::default(),
             compatible_surface: Some(surface),
+            apply_limit_buckets: false,
         })
         .await
         .unwrap();
@@ -438,6 +447,7 @@ async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter,
             required_limits: Limits::default(),
             memory_hints: MemoryHints::Performance,
             trace: Trace::Off,
+            experimental_features: ExperimentalFeatures::disabled(),
         })
         .await
         .unwrap();

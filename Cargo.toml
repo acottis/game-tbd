@@ -13,12 +13,12 @@ pollster = { version = "0.4.0", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30.9", default-features = false, features = ["rwh_06", "wayland"] }
-wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "vulkan"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["wgsl", "vulkan"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winit = { version = "0.30.9", default-features = false, features = ["rwh_06"] }
-wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "dx12", "vulkan"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["wgsl", "dx12", "vulkan"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 winit = { version = "0.30.9", default-features = false, features = ["rwh_06"] }
-wgpu = { version = "25.0.0", default-features = false, features = ["wgsl", "metal"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["wgsl", "metal"] }
