@@ -89,30 +89,30 @@ impl App {
         if self.input.is_pressed(KeyCode::Space) {
             player.jump(self.delta_time, 2000.0);
         }
-        // if self.input.is_pressed(KeyCode::ArrowUp) {
-        //     camera.move_forward(self.delta_time, 10.0)
-        // }
-        // if self.input.is_pressed(KeyCode::ArrowLeft) {
-        //     camera.strafe(self.delta_time, -10.0);
-        // }
-        // if self.input.is_pressed(KeyCode::ArrowDown) {
-        //     camera.move_forward(self.delta_time, -10.0)
-        // }
-        // if self.input.is_pressed(KeyCode::ArrowRight) {
-        //     camera.strafe(self.delta_time, 10.0);
-        // }
-        // if self.input.is_pressed(KeyCode::KeyU) {
-        //     camera.rotate_z(self.delta_time, PI / 2.0)
-        // }
-        // if self.input.is_pressed(KeyCode::KeyH) {
-        //     camera.rotate_y(self.delta_time, -PI / 2.0)
-        // }
-        // if self.input.is_pressed(KeyCode::KeyJ) {
-        //     camera.rotate_z(self.delta_time, -PI / 2.0)
-        // }
-        // if self.input.is_pressed(KeyCode::KeyK) {
-        //     camera.rotate_y(self.delta_time, PI / 2.0)
-        // }
+        if self.input.is_pressed(KeyCode::ArrowUp) {
+            camera.move_forward(self.delta_time, 10.0)
+        }
+        if self.input.is_pressed(KeyCode::ArrowLeft) {
+            camera.strafe(self.delta_time, -10.0);
+        }
+        if self.input.is_pressed(KeyCode::ArrowDown) {
+            camera.move_forward(self.delta_time, -10.0)
+        }
+        if self.input.is_pressed(KeyCode::ArrowRight) {
+            camera.strafe(self.delta_time, 10.0);
+        }
+        if self.input.is_pressed(KeyCode::KeyU) {
+            camera.rotate_z(self.delta_time, PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyH) {
+            camera.rotate_y(self.delta_time, -PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyJ) {
+            camera.rotate_z(self.delta_time, -PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyK) {
+            camera.rotate_y(self.delta_time, PI / 2.0)
+        }
         if self.input.is_pressed(KeyCode::Escape) {
             event_loop.exit();
         }
