@@ -45,16 +45,15 @@ impl State {
         }
     }
 
+    #[inline(always)]
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         self.gpu.resize(size.width, size.height);
         self.camera.set_aspect_ratio(&size);
     }
 
-    pub fn render(&mut self, entities: &Vec<Entity>) {
-        self.gpu.write_camera(&self.camera.view_perspective_rh());
-
-        self.gpu.render(entities, &self.window);
-        self.window.pre_present_notify();
+    #[inline(always)]
+    pub fn render(&mut self, entities: &[Entity]) {
+        self.gpu.render(&self.window, entities, &self.camera);
     }
 }
 

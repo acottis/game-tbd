@@ -249,12 +249,7 @@ impl Gpu {
         }
     }
 
-    pub fn write_camera(&mut self, camera: &Mat4) {
-        self.queue
-            .write_buffer(&self.camera_buffer, 0, bytes_of(camera));
-    }
-
-    pub fn render(&mut self, entities: &[Entity], window: &Window) {
+    pub fn render(&mut self, window: &Window, entities: &[Entity], camera: &Camera) {
         let frame = match self.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
             CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
@@ -287,12 +282,19 @@ impl Gpu {
             let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
             render_pass.set_pipeline(&self.render_pipeline);
 
+            // Update camera buffer
+            self.queue.write_buffer(
+                &self.camera_buffer,
+                0,
+                bytes_of(&camera.view_perspective_rh()),
+            );
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in entities {
                 let transform =
                     Mat4::from_translation(entity.position()) * Mat4::from_scaling(entity.scale());
+                // Update entity buffer
                 self.queue
                     .write_buffer(&entity.mesh.transform, 0, bytes_of(&transform));
 
