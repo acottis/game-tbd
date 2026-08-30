@@ -1,5 +1,6 @@
 mod gltf;
 
+use ::gltf::animation::{Interpolation, Property};
 use image::DynamicImage;
 
 pub use gltf::load_mesh;
@@ -36,6 +37,7 @@ pub struct Mesh {
     pub indices: Vec<u32>,
     pub material: Material,
 }
+
 impl Mesh {
     pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Material) -> Self {
         Self {
@@ -44,4 +46,25 @@ impl Mesh {
             material,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Animation {
+    pub channels: Vec<AnimationChannel>,
+    pub duration: f32,
+}
+
+#[derive(Debug)]
+pub struct AnimationChannel {
+    pub property: Property,
+    pub interpolation: Interpolation,
+    pub times: Vec<f32>,
+    pub values: AnimationValues,
+}
+
+#[derive(Debug)]
+pub enum AnimationValues {
+    Translation(Vec<[f32; 3]>),
+    Rotation(Vec<[f32; 4]>),
+    Scale(Vec<[f32; 3]>),
 }

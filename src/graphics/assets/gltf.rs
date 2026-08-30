@@ -5,7 +5,10 @@ use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
 use crate::{
-    graphics::{Vertex, assets::AssetModel},
+    graphics::{
+        Vertex,
+        assets::{Animation, AnimationChannel, AnimationValues, AssetModel},
+    },
     maths::Vec3,
 };
 
@@ -31,52 +34,45 @@ fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> 
     }
 }
 
-pub fn inspect_animations(path: impl AsRef<Path>) {
-    let (document, buffers, _images) = gltf::import(path).unwrap();
+pub fn load_animation(path: impl AsRef<Path>) -> Animation {
+    let (document, buffers, _) = gltf::import(path).unwrap();
 
-    for animation in document.animations() {
-        println!("Animation: {:?}", animation.name());
+    let animation = document.animations().next().unwrap();
 
-        for channel in animation.channels() {
-            let target = channel.target();
+    let mut channels = Vec::new();
+    let mut duration: f32 = 0.0;
 
-            println!(
-                "\nNode {} {:?}",
-                target.node().index(),
-                target.node().name()
-            );
+    for channel in animation.channels() {
+        let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
 
-            println!("Path: {:?}", target.property());
+        let times: Vec<f32> = reader.read_inputs().unwrap().collect();
 
-            let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
+        duration = duration.max(*times.last().unwrap());
 
-            let times = reader.read_inputs().unwrap();
-            let outputs = reader.read_outputs().unwrap();
-
-            match outputs {
-                gltf::animation::util::ReadOutputs::Translations(values) => {
-                    for (time, value) in times.zip(values) {
-                        println!("  t={:.3} translation={:?}", time, value);
-                    }
-                }
-
-                gltf::animation::util::ReadOutputs::Rotations(values) => {
-                    for (time, value) in times.zip(values.into_f32()) {
-                        println!("  t={:.3} rotation={:?}", time, value);
-                    }
-                }
-
-                gltf::animation::util::ReadOutputs::Scales(values) => {
-                    for (time, value) in times.zip(values) {
-                        println!("  t={:.3} scale={:?}", time, value);
-                    }
-                }
-
-                _ => {}
+        let values = match reader.read_outputs().unwrap() {
+            gltf::animation::util::ReadOutputs::Translations(values) => {
+                AnimationValues::Translation(values.collect())
             }
-        }
+            gltf::animation::util::ReadOutputs::Rotations(values) => {
+                AnimationValues::Rotation(values.into_f32().collect())
+            }
+            gltf::animation::util::ReadOutputs::Scales(values) => {
+                AnimationValues::Scale(values.collect())
+            }
+            _ => unimplemented!(),
+        };
+
+        channels.push(AnimationChannel {
+            property: channel.target().property(),
+            interpolation: channel.sampler().interpolation(),
+            times,
+            values,
+        });
     }
+
+    Animation { channels, duration }
 }
+
 pub fn load_mesh(path: impl AsRef<Path>) -> AssetModel {
     let (document, buffer, _image) = gltf::import(&path).unwrap();
 
@@ -137,8 +133,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn load_animation() {
-        inspect_animations("assets/foo.glb");
+    fn load_animations() {
+        load_animation("assets/foo.glb");
     }
 
     #[test]
