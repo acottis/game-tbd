@@ -5,6 +5,7 @@ use assets::load_mesh;
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::graphics::gpu::GpuModels;
 use crate::{game::Entity, maths::Vec3};
 
 mod assets;
@@ -12,7 +13,7 @@ mod camera;
 mod gpu;
 mod light;
 pub use camera::Camera;
-pub use gpu::MeshInstance;
+pub use gpu::ModelInstance;
 pub use gpu::Vertex;
 pub use light::Light;
 
@@ -20,6 +21,7 @@ pub struct State {
     pub window: Arc<Window>,
     pub camera: Camera,
     pub gpu: Gpu,
+    pub models: GpuModels,
 }
 
 impl State {
@@ -38,10 +40,18 @@ impl State {
             &light,
         );
 
+        let asset_models = [
+            load_mesh("assets/foo.glb"),
+            load_mesh("assets/cube.glb"),
+            load_mesh("assets/ground.glb"),
+        ];
+        let models = GpuModels::load(&gpu, asset_models);
+
         Self {
             window,
             camera,
             gpu,
+            models,
         }
     }
 
@@ -53,22 +63,7 @@ impl State {
 
     #[inline(always)]
     pub fn render(&mut self, entities: &[Entity]) {
-        self.gpu.render(&self.window, entities, &self.camera);
+        self.gpu
+            .render(&self.window, entities, &self.camera, &self.models);
     }
-}
-
-pub fn load_assets() -> impl Iterator<Item = assets::Mesh> {
-    [
-        load_mesh("assets/BoxTextured.glb"),
-        load_mesh("assets/cube.glb"),
-        load_mesh("assets/ground.glb"),
-    ]
-    .into_iter()
-    .flatten()
-}
-
-pub enum MeshId {
-    Ground,
-    Cube,
-    CubeGltf,
 }

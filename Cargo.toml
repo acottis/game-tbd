@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 bytemuck = { version = "1.22.0", default-features = false }
 env_logger = { version = "0.11.8", default-features = false }
-gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
+gltf = { version = "1.4.1", default-features = false, features = ["import", "utils", "names"] }
 image = { version = "0.25.6", default-features = false, features = ["jpeg"] }
 log = { version = "0.4.27", default-features = false }
 pollster = { version = "0.4.0", default-features = false }

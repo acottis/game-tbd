@@ -4,7 +4,10 @@ use gltf::{buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
-use crate::{graphics::Vertex, maths::Vec3};
+use crate::{
+    graphics::{Vertex, assets::AssetModel},
+    maths::Vec3,
+};
 
 fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> {
     if let Some(info) = info {
@@ -28,15 +31,61 @@ fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> 
     }
 }
 
-pub fn load_mesh(path: impl AsRef<Path>) -> Vec<Mesh> {
+pub fn inspect_animations(path: impl AsRef<Path>) {
+    let (document, buffers, _images) = gltf::import(path).unwrap();
+
+    for animation in document.animations() {
+        println!("Animation: {:?}", animation.name());
+
+        for channel in animation.channels() {
+            let target = channel.target();
+
+            println!(
+                "\nNode {} {:?}",
+                target.node().index(),
+                target.node().name()
+            );
+
+            println!("Path: {:?}", target.property());
+
+            let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
+
+            let times = reader.read_inputs().unwrap();
+            let outputs = reader.read_outputs().unwrap();
+
+            match outputs {
+                gltf::animation::util::ReadOutputs::Translations(values) => {
+                    for (time, value) in times.zip(values) {
+                        println!("  t={:.3} translation={:?}", time, value);
+                    }
+                }
+
+                gltf::animation::util::ReadOutputs::Rotations(values) => {
+                    for (time, value) in times.zip(values.into_f32()) {
+                        println!("  t={:.3} rotation={:?}", time, value);
+                    }
+                }
+
+                gltf::animation::util::ReadOutputs::Scales(values) => {
+                    for (time, value) in times.zip(values) {
+                        println!("  t={:.3} scale={:?}", time, value);
+                    }
+                }
+
+                _ => {}
+            }
+        }
+    }
+}
+pub fn load_mesh(path: impl AsRef<Path>) -> AssetModel {
     let (document, buffer, _image) = gltf::import(&path).unwrap();
 
     let mut meshes = Vec::new();
 
     for mesh in document.meshes() {
         for primitive in mesh.primitives() {
-            let mut vertex_buffer = Vec::with_capacity(1000);
-            let mut index_buffer = Vec::with_capacity(1000);
+            let mut vertex_buffer = Vec::new();
+            let mut index_buffer = Vec::new();
 
             let reader = primitive.reader(|p| Some(&buffer[p.index()]));
 
@@ -80,7 +129,7 @@ pub fn load_mesh(path: impl AsRef<Path>) -> Vec<Mesh> {
         }
     }
 
-    meshes
+    AssetModel(meshes)
 }
 
 #[cfg(test)]
@@ -88,8 +137,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn foo() {
-        load_mesh("assets/BoxTextured.glb");
+    fn load_animation() {
+        inspect_animations("assets/foo.glb");
+    }
+
+    #[test]
+    fn load_meshes() {
+        load_mesh("assets/foo.glb");
         load_mesh("assets/cube.glb");
         load_mesh("assets/ground.glb");
     }

@@ -1,4 +1,5 @@
-use crate::graphics::{MeshId, MeshInstance, State};
+use crate::graphics::{ModelInstance, State};
+
 use crate::maths::Vec3;
 use crate::physics::GRAVITY;
 
@@ -7,16 +8,24 @@ pub struct Entity {
     scale: Vec3,
     physics: bool,
     falling: bool,
-    pub mesh: MeshInstance,
+    pub model: ModelInstance,
+}
+
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum ModelId {
+    Foo,
+    Cube,
+    Ground,
 }
 
 impl Entity {
-    pub fn new(position: Vec3, scale: Vec3, mesh: MeshInstance, physics: bool) -> Self {
+    pub fn new(position: Vec3, scale: Vec3, model: ModelInstance, physics: bool) -> Self {
         Self {
             position,
             scale,
             physics,
-            mesh,
+            model,
             falling: false,
         }
     }
@@ -72,13 +81,13 @@ impl Game {
         let ground = Entity::new(
             Vec3::zeroes(),
             Vec3::xyz(20.0),
-            state.gpu.get_mesh(MeshId::Ground),
+            state.gpu.create_model_instance(ModelId::Ground),
             false,
         );
         let cube1 = Entity::new(
             Vec3::zeroes(),
             Vec3::xyz(0.3),
-            state.gpu.get_mesh(MeshId::Cube),
+            state.gpu.create_model_instance(ModelId::Foo),
             true,
         );
 
