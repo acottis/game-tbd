@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use assets::load_mesh;
+use assets::load;
 
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
@@ -41,9 +41,9 @@ impl State {
         );
 
         let asset_models = [
-            load_mesh("assets/foo.glb"),
-            load_mesh("assets/cube.glb"),
-            load_mesh("assets/ground.glb"),
+            load("assets/foo.glb"),
+            load("assets/cube.glb"),
+            load("assets/ground.glb"),
         ];
         let models = GpuModels::load(&gpu, asset_models);
 

@@ -77,24 +77,6 @@ impl Game {
         }
     }
 
-    pub fn init(&mut self, state: &State) {
-        let ground = Entity::new(
-            Vec3::zeroes(),
-            Vec3::xyz(20.0),
-            state.gpu.create_model_instance(ModelId::Ground),
-            false,
-        );
-        let cube1 = Entity::new(
-            Vec3::zeroes(),
-            Vec3::xyz(0.3),
-            state.gpu.create_model_instance(ModelId::Foo),
-            true,
-        );
-
-        self.entities.push(ground);
-        self.entities.push(cube1);
-    }
-
     pub fn update(&mut self, delta_time: f32) {
         for entity in self.entities.iter_mut() {
             if entity.physics {

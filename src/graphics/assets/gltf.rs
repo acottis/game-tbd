@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use gltf::{buffer::Data, image::Source, texture::Info};
+use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
 use crate::{
     graphics::{
         Vertex,
-        assets::{Animation, AnimationChannel, AnimationValues, AssetModel},
+        assets::{AnimationChannel, AnimationClip, AnimationValues, AssetModel},
     },
     maths::Vec3,
 };
@@ -34,48 +34,45 @@ fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> 
     }
 }
 
-pub fn load_animation(path: impl AsRef<Path>) -> Animation {
-    let (document, buffers, _) = gltf::import(path).unwrap();
+fn load_animations(document: &Document, buffer: &Vec<Data>) -> Vec<AnimationClip> {
+    let mut animation_clips = Vec::new();
+    for animation in document.animations() {
+        let mut channels = Vec::new();
+        let mut duration: f32 = 0.0;
 
-    let animation = document.animations().next().unwrap();
+        for channel in animation.channels() {
+            let reader = channel.reader(|c| Some(&buffer[c.index()]));
 
-    let mut channels = Vec::new();
-    let mut duration: f32 = 0.0;
+            let times: Vec<f32> = reader.read_inputs().unwrap().collect();
 
-    for channel in animation.channels() {
-        let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
+            duration = duration.max(*times.last().unwrap());
 
-        let times: Vec<f32> = reader.read_inputs().unwrap().collect();
+            let values = match reader.read_outputs().unwrap() {
+                gltf::animation::util::ReadOutputs::Translations(values) => {
+                    AnimationValues::Translation(values.collect())
+                }
+                gltf::animation::util::ReadOutputs::Rotations(values) => {
+                    AnimationValues::Rotation(values.into_f32().collect())
+                }
+                gltf::animation::util::ReadOutputs::Scales(values) => {
+                    AnimationValues::Scale(values.collect())
+                }
+                _ => unimplemented!(),
+            };
 
-        duration = duration.max(*times.last().unwrap());
-
-        let values = match reader.read_outputs().unwrap() {
-            gltf::animation::util::ReadOutputs::Translations(values) => {
-                AnimationValues::Translation(values.collect())
-            }
-            gltf::animation::util::ReadOutputs::Rotations(values) => {
-                AnimationValues::Rotation(values.into_f32().collect())
-            }
-            gltf::animation::util::ReadOutputs::Scales(values) => {
-                AnimationValues::Scale(values.collect())
-            }
-            _ => unimplemented!(),
-        };
-
-        channels.push(AnimationChannel {
-            property: channel.target().property(),
-            interpolation: channel.sampler().interpolation(),
-            times,
-            values,
-        });
+            channels.push(AnimationChannel {
+                property: channel.target().property(),
+                interpolation: channel.sampler().interpolation(),
+                times,
+                values,
+            });
+        }
+        animation_clips.push(AnimationClip { channels, duration });
     }
-
-    Animation { channels, duration }
+    animation_clips
 }
 
-pub fn load_mesh(path: impl AsRef<Path>) -> AssetModel {
-    let (document, buffer, _image) = gltf::import(&path).unwrap();
-
+fn load_mesh(document: &Document, buffer: &Vec<Data>) -> Vec<Mesh> {
     let mut meshes = Vec::new();
 
     for mesh in document.meshes() {
@@ -124,8 +121,15 @@ pub fn load_mesh(path: impl AsRef<Path>) -> AssetModel {
             meshes.push(Mesh::new(vertex_buffer, index_buffer, material));
         }
     }
+    meshes
+}
 
-    AssetModel(meshes)
+pub fn load(path: impl AsRef<Path>) -> AssetModel {
+    let (document, buffer, _) = gltf::import(&path).unwrap();
+    let meshes = load_mesh(&document, &buffer);
+    let animations = load_animations(&document, &buffer);
+
+    AssetModel { meshes, animations }
 }
 
 #[cfg(test)]
@@ -133,14 +137,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn load_animations() {
-        load_animation("assets/foo.glb");
-    }
-
-    #[test]
-    fn load_meshes() {
-        load_mesh("assets/foo.glb");
-        load_mesh("assets/cube.glb");
-        load_mesh("assets/ground.glb");
+    fn load_assets() {
+        load("assets/foo.glb");
+        load("assets/cube.glb");
+        load("assets/ground.glb");
     }
 }

@@ -21,7 +21,10 @@ mod maths;
 mod physics;
 use graphics::State;
 
-use crate::maths::Vec3;
+use crate::{
+    game::{Entity, ModelId},
+    maths::Vec3,
+};
 
 struct App {
     state: Option<State>,
@@ -45,7 +48,20 @@ impl App {
     fn init(&mut self, window: Window) {
         let state = State::new(window);
 
-        self.game.init(&state);
+        let ground = Entity::new(
+            Vec3::zeroes(),
+            Vec3::xyz(20.0),
+            state.gpu.create_model_instance(ModelId::Ground),
+            false,
+        );
+        let cube = Entity::new(
+            Vec3::zeroes(),
+            Vec3::xyz(0.3),
+            state.gpu.create_model_instance(ModelId::Foo),
+            true,
+        );
+        self.game.entities.extend([ground, cube]);
+
         self.state = Some(state)
     }
 

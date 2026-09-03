@@ -372,7 +372,7 @@ pub struct GpuModel {
 impl GpuModel {
     pub fn load(gpu: &Gpu, model: &assets::AssetModel) -> Self {
         // TODO: Handle more than one mesh
-        let model = model.0.first().unwrap();
+        let model = model.meshes.first().unwrap();
 
         let index = gpu.device.create_buffer_init(&BufferInitDescriptor {
             label: None,

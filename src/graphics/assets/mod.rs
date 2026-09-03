@@ -1,9 +1,8 @@
 mod gltf;
 
 use ::gltf::animation::{Interpolation, Property};
+pub use gltf::load;
 use image::DynamicImage;
-
-pub use gltf::load_mesh;
 
 use super::{Vertex, gpu::MaterialUniform};
 
@@ -30,7 +29,10 @@ impl Default for Material {
     }
 }
 
-pub struct AssetModel(pub Vec<Mesh>);
+pub struct AssetModel {
+    pub meshes: Vec<Mesh>,
+    pub animations: Vec<AnimationClip>,
+}
 
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
@@ -49,7 +51,7 @@ impl Mesh {
 }
 
 #[derive(Debug)]
-pub struct Animation {
+pub struct AnimationClip {
     pub channels: Vec<AnimationChannel>,
     pub duration: f32,
 }
