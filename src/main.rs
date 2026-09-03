@@ -50,25 +50,23 @@ impl App {
     }
 
     #[inline(always)]
-    fn state(&mut self) -> &mut State {
-        unsafe { self.state.as_mut().unwrap_unchecked() }
-    }
-
-    #[inline(always)]
     fn render(&mut self) {
-        self.state.as_mut().unwrap().render(&self.game.entities);
+        let state = unsafe { self.state.as_mut().unwrap_unchecked() };
+        state.render(&self.game.entities);
     }
 
     #[inline(always)]
     fn resize(&mut self, size: PhysicalSize<u32>) {
         if size.width * size.height != 0 {
-            self.state().resize(size);
+            let state = unsafe { self.state.as_mut().unwrap_unchecked() };
+            state.resize(size);
         }
     }
 
     fn run_input(&mut self, event_loop: &ActiveEventLoop) {
+        let state = unsafe { self.state.as_mut().unwrap_unchecked() };
         let player = &mut self.game.entities[1];
-        let camera = &mut self.state.as_mut().unwrap().camera;
+        let camera = &mut state.camera;
 
         let mut movement = Vec3::zeroes();
         if self.input.is_pressed(KeyCode::KeyW) {
