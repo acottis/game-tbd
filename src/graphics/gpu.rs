@@ -120,28 +120,6 @@ impl Gpu {
         self.surface.configure(&self.device, &self.surface_config);
     }
 
-    pub fn create_model_instance(&self, model: ModelId) -> ModelInstance {
-        let transform = self.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Transform"),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            contents: bytes_of(&Mat4::identity()),
-        });
-        let transform_bind_group = self.device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Transform"),
-            layout: &self.transform_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: transform.as_entire_binding(),
-            }],
-        });
-
-        ModelInstance {
-            model_id: model,
-            transform_buffer: transform,
-            transform_bind_group,
-        }
-    }
-
     pub fn render(
         &mut self,
         window: &Window,
@@ -195,11 +173,11 @@ impl Gpu {
                     Mat4::from_translation(entity.position()) * Mat4::from_scaling(entity.scale());
                 // Update entity buffer
                 self.queue
-                    .write_buffer(&entity.model.transform_buffer, 0, bytes_of(&transform));
+                    .write_buffer(&entity.transform.buffer, 0, bytes_of(&transform));
 
-                let model = models.get(entity.model.model_id);
+                let model = models.get(entity.model);
                 render_pass.set_bind_group(2, &model.bind_group, &[]);
-                render_pass.set_bind_group(3, &entity.model.transform_bind_group, &[]);
+                render_pass.set_bind_group(3, &entity.transform.bind_group, &[]);
 
                 render_pass.set_vertex_buffer(0, model.vertex.slice(..));
 
@@ -356,10 +334,29 @@ async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter,
     (adapter, device, queue)
 }
 
-pub struct ModelInstance {
-    model_id: ModelId,
-    transform_buffer: Buffer,
-    transform_bind_group: BindGroup,
+pub struct ModelTransform {
+    buffer: Buffer,
+    bind_group: BindGroup,
+}
+
+impl ModelTransform {
+    pub fn new(gpu: &Gpu) -> Self {
+        let buffer = gpu.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Transform"),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            contents: bytes_of(&Mat4::identity()),
+        });
+        let bind_group = gpu.device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Transform"),
+            layout: &gpu.transform_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+
+        Self { buffer, bind_group }
+    }
 }
 
 pub struct GpuModel {

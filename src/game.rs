@@ -1,15 +1,7 @@
-use crate::graphics::{ModelInstance, State};
+use crate::graphics::ModelTransform;
 
 use crate::maths::Vec3;
 use crate::physics::GRAVITY;
-
-pub struct Entity {
-    position: Vec3,
-    scale: Vec3,
-    physics: bool,
-    falling: bool,
-    pub model: ModelInstance,
-}
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
@@ -19,14 +11,31 @@ pub enum ModelId {
     Ground,
 }
 
+pub struct Entity {
+    position: Vec3,
+    scale: Vec3,
+    physics: bool,
+    falling: bool,
+    pub model: ModelId,
+    pub transform: ModelTransform,
+}
+
 impl Entity {
-    pub fn new(position: Vec3, scale: Vec3, model: ModelInstance, physics: bool) -> Self {
+    pub fn new(
+        position: Vec3,
+        scale: Vec3,
+        physics: bool,
+        model: ModelId,
+        // TODO: Leaky abstraction
+        transform: ModelTransform,
+    ) -> Self {
         Self {
             position,
             scale,
             physics,
-            model,
             falling: false,
+            model,
+            transform,
         }
     }
     pub const fn position(&self) -> Vec3 {

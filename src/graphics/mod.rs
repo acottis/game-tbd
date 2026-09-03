@@ -13,7 +13,7 @@ mod camera;
 mod gpu;
 mod light;
 pub use camera::Camera;
-pub use gpu::ModelInstance;
+pub use gpu::ModelTransform;
 pub use gpu::Vertex;
 pub use light::Light;
 

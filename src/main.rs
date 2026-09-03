@@ -23,6 +23,7 @@ use graphics::State;
 
 use crate::{
     game::{Entity, ModelId},
+    graphics::ModelTransform,
     maths::Vec3,
 };
 
@@ -51,14 +52,16 @@ impl App {
         let ground = Entity::new(
             Vec3::zeroes(),
             Vec3::xyz(20.0),
-            state.gpu.create_model_instance(ModelId::Ground),
             false,
+            ModelId::Ground,
+            ModelTransform::new(&state.gpu),
         );
         let cube = Entity::new(
             Vec3::zeroes(),
             Vec3::xyz(0.3),
-            state.gpu.create_model_instance(ModelId::Foo),
             true,
+            ModelId::Foo,
+            ModelTransform::new(&state.gpu),
         );
         self.game.entities.extend([ground, cube]);
 

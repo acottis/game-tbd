@@ -174,6 +174,7 @@ impl From<[f32; 3]> for Vec3 {
         }
     }
 }
+
 impl core::ops::Neg for Vec3 {
     type Output = Self;
 
@@ -185,6 +186,7 @@ impl core::ops::Neg for Vec3 {
         }
     }
 }
+
 impl core::ops::Div<f32> for &Vec3 {
     type Output = Vec3;
 
@@ -196,6 +198,7 @@ impl core::ops::Div<f32> for &Vec3 {
         }
     }
 }
+
 impl core::ops::Mul<Vec3> for Mat3 {
     type Output = Vec3;
 
@@ -207,6 +210,7 @@ impl core::ops::Mul<Vec3> for Mat3 {
         }
     }
 }
+
 impl core::ops::Add for Vec3 {
     type Output = Self;
 
@@ -218,6 +222,7 @@ impl core::ops::Add for Vec3 {
         }
     }
 }
+
 impl core::ops::Sub for Vec3 {
     type Output = Vec3;
 
@@ -229,6 +234,7 @@ impl core::ops::Sub for Vec3 {
         }
     }
 }
+
 impl core::ops::Sub for &Vec3 {
     type Output = Vec3;
 
@@ -240,6 +246,7 @@ impl core::ops::Sub for &Vec3 {
         }
     }
 }
+
 impl core::ops::Mul<f32> for Vec3 {
     type Output = Self;
 
