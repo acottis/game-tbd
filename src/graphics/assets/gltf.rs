@@ -1,15 +1,13 @@
 use std::path::Path;
 
+use glam::Vec3;
 use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
-use crate::{
-    graphics::{
-        Vertex,
-        assets::{AnimationChannel, AnimationClip, AnimationValues, AssetModel},
-    },
-    maths::Vec3,
+use crate::graphics::{
+    Vertex,
+    assets::{AnimationChannel, AnimationClip, AnimationValues, AssetModel},
 };
 
 fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> {
@@ -91,7 +89,7 @@ fn load_mesh(document: &Document, buffer: &Vec<Data>) -> Vec<Mesh> {
                 }
             } else {
                 for (vertex, uv) in vertices.zip(uvs) {
-                    vertex_buffer.push(Vertex::new(vertex.into(), Vec3::y(), uv))
+                    vertex_buffer.push(Vertex::new(vertex.into(), Vec3::Y, uv))
                 }
             }
 

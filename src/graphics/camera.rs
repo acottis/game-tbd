@@ -1,8 +1,7 @@
 use std::f32::consts::PI;
 
+use glam::{Mat3, Mat4, Vec3, Vec4};
 use winit::dpi::PhysicalSize;
-
-use crate::maths::{Mat3, Mat4, Vec3, Vec4};
 
 #[derive(Debug)]
 pub struct Camera {
@@ -43,43 +42,43 @@ impl Camera {
     pub fn forward_direction(&self) -> Vec3 {
         let mut forward = self.target - self.position;
         forward.y = 0.0;
-        forward.normalise()
+        forward.normalize()
     }
     pub fn right_direction(&self) -> Vec3 {
         let forward = self.forward_direction();
-        forward.cross(&self.up).normalise()
+        forward.cross(self.up).normalize()
     }
 
     pub fn rotate_x(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::rotation_x(theta * delta_time);
+        let rotation = Mat3::from_rotation_x(theta * delta_time);
         let offset = self.position - self.target;
 
         self.position = self.target + rotation * offset;
     }
 
     pub fn rotate_y(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::rotation_y(theta * delta_time);
+        let rotation = Mat3::from_rotation_y(theta * delta_time);
         let offset = self.position - self.target;
 
         self.position = self.target + rotation * offset;
     }
 
     pub fn rotate_z(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::rotation_z(theta * delta_time);
+        let rotation = Mat3::from_rotation_z(theta * delta_time);
         let offset = self.position - self.target;
 
         self.position = self.target + rotation * offset;
     }
 
     pub fn move_forward(&mut self, delta_time: f32, speed: f32) {
-        let forward = (self.target - self.position).normalise();
+        let forward = (self.target - self.position).normalize();
         self.position += forward * speed * delta_time;
     }
 
     /// + is right, - is left
     pub fn strafe(&mut self, delta_time: f32, speed: f32) {
-        let forward = (self.target - self.position).normalise();
-        let right = forward.cross(&self.up).normalise();
+        let forward = (self.target - self.position).normalize();
+        let right = forward.cross(self.up).normalize();
         //let right = self.up.cross(&forward).normalise();
 
         let delta = right * speed * delta_time;
@@ -90,26 +89,26 @@ impl Camera {
 
     pub fn zoom(&mut self, amount: f32) {
         let offset = self.position - self.target;
-        let direction = offset.normalise();
+        let direction = offset.normalize();
 
         self.position -= direction * amount;
     }
 
     fn view_rh(&self) -> Mat4 {
-        let forward = (self.target - self.position).normalise();
-        let right = forward.cross(&self.up).normalise();
-        let up = right.cross(&forward).normalise();
+        let forward = (self.target - self.position).normalize();
+        let right = forward.cross(self.up).normalize();
+        let up = right.cross(forward).normalize();
 
-        let projection_x = -right.dot(&self.position);
-        let projection_y = -up.dot(&self.position);
-        let projection_z = forward.dot(&self.position);
+        let projection_x = -right.dot(self.position);
+        let projection_y = -up.dot(self.position);
+        let projection_z = forward.dot(self.position);
 
-        Mat4 {
-            x: Vec4::new(right.x, up.x, -forward.x, 0.0),
-            y: Vec4::new(right.y, up.y, -forward.y, 0.0),
-            z: Vec4::new(right.z, up.z, -forward.z, 0.0),
-            w: Vec4::new(projection_x, projection_y, projection_z, 1.0),
-        }
+        Mat4::from_cols(
+            Vec4::new(right.x, up.x, -forward.x, 0.0),
+            Vec4::new(right.y, up.y, -forward.y, 0.0),
+            Vec4::new(right.z, up.z, -forward.z, 0.0),
+            Vec4::new(projection_x, projection_y, projection_z, 1.0),
+        )
     }
 
     fn perspective_rh(&self) -> Mat4 {
@@ -120,12 +119,12 @@ impl Camera {
         let a = -self.far / range;
         let b = -(self.far * self.near) / range;
 
-        Mat4 {
-            x: Vec4::new(f / self.aspect, 0.0, 0.0, 0.0),
-            y: Vec4::new(0.0, f, 0.0, 0.0),
-            z: Vec4::new(0.0, 0.0, a, -1.0),
-            w: Vec4::new(0.0, 0.0, b, 0.0),
-        }
+        Mat4::from_cols(
+            Vec4::new(f / self.aspect, 0.0, 0.0, 0.0),
+            Vec4::new(0.0, f, 0.0, 0.0),
+            Vec4::new(0.0, 0.0, a, -1.0),
+            Vec4::new(0.0, 0.0, b, 0.0),
+        )
     }
 
     pub fn view_perspective_rh(&self) -> Mat4 {

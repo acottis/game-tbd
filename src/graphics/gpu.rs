@@ -1,6 +1,7 @@
 use std::num::NonZeroU64;
 
 use bytemuck::bytes_of;
+use glam::{Mat4, Vec3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt as _},
     *,
@@ -10,7 +11,6 @@ use winit::window::Window;
 use crate::{
     game::{Entity, ModelId},
     graphics::assets::{AssetModel, AssetModels},
-    maths::{Mat4, Vec3},
 };
 
 use super::{Camera, Light, assets};
@@ -171,7 +171,7 @@ impl Gpu {
 
             for entity in entities {
                 let entity_transform =
-                    Mat4::from_translation(entity.position()) * Mat4::from_scaling(entity.scale());
+                    Mat4::from_translation(entity.position()) * Mat4::from_scale(entity.scale());
 
                 let transform = match entity.animation {
                     Some(ref animation) => {
@@ -354,7 +354,7 @@ impl ModelTransform {
         let buffer = gpu.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Transform"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            contents: bytes_of(&Mat4::identity()),
+            contents: bytes_of(&Mat4::IDENTITY),
         });
         let bind_group = gpu.device.create_bind_group(&BindGroupDescriptor {
             label: Some("Transform"),

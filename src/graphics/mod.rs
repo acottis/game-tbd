@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use assets::load;
-
+use glam::Vec3;
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::game::Entity;
 use crate::graphics::assets::AssetModels;
 use crate::graphics::gpu::GpuModels;
-use crate::{game::Entity, maths::Vec3};
 
 mod assets;
 mod camera;

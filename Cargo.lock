@@ -508,6 +508,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "env_logger",
+ "glam",
  "gltf",
  "image",
  "log",
@@ -537,6 +538,15 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi 6.0.0",
+]
+
+[[package]]
+name = "glam"
+version = "0.33.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21fef0953c54fd3de2f44b743fbf77e044c81a25faee03636dfccc0d35135e23"
+dependencies = [
+ "bytemuck",
 ]
 
 [[package]]

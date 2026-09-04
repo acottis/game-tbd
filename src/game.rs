@@ -1,6 +1,7 @@
+use glam::Vec3;
+
 use crate::graphics::ModelTransform;
 
-use crate::maths::Vec3;
 use crate::physics::GRAVITY;
 
 #[derive(Clone, Copy)]

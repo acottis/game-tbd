@@ -4,6 +4,7 @@ use std::{
 };
 
 use game::Game;
+use glam::Vec3;
 use input::Input;
 use winit::{
     application::ApplicationHandler,
@@ -17,14 +18,12 @@ use winit::{
 mod game;
 mod graphics;
 mod input;
-mod maths;
 mod physics;
 use graphics::State;
 
 use crate::{
     game::{Entity, ModelId},
     graphics::ModelTransform,
-    maths::Vec3,
 };
 
 struct App {
@@ -50,15 +49,15 @@ impl App {
         let state = State::new(window);
 
         let ground = Entity::new(
-            Vec3::zeroes(),
-            Vec3::xyz(20.0),
+            Vec3::ZERO,
+            Vec3::splat(20.0),
             false,
             ModelId::Ground,
             ModelTransform::new(&state.gpu),
         );
         let cube = Entity::new(
-            Vec3::zeroes(),
-            Vec3::xyz(0.3),
+            Vec3::ZERO,
+            Vec3::splat(0.3),
             true,
             ModelId::Foo,
             ModelTransform::new(&state.gpu),
@@ -87,7 +86,7 @@ impl App {
         let player = &mut self.game.entities[1];
         let camera = &mut state.camera;
 
-        let mut movement = Vec3::zeroes();
+        let mut movement = Vec3::ZERO;
         if self.input.is_pressed(KeyCode::KeyW) {
             movement += camera.forward_direction()
         }
