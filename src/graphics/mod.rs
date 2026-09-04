@@ -5,6 +5,7 @@ use assets::load;
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::graphics::assets::AssetModels;
 use crate::graphics::gpu::GpuModels;
 use crate::{game::Entity, maths::Vec3};
 
@@ -22,6 +23,7 @@ pub struct State {
     pub camera: Camera,
     pub gpu: Gpu,
     pub models: GpuModels,
+    pub asset_models: AssetModels,
 }
 
 impl State {
@@ -40,18 +42,17 @@ impl State {
             &light,
         );
 
-        let asset_models = [
-            load("assets/foo.glb"),
-            load("assets/cube.glb"),
-            load("assets/ground.glb"),
-        ];
-        let models = GpuModels::load(&gpu, asset_models);
+        let asset_models =
+            AssetModels::load(["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"]);
+        // TODO: Avoid this clone
+        let models = GpuModels::load(&gpu, asset_models.0.clone());
 
         Self {
             window,
             camera,
             gpu,
             models,
+            asset_models,
         }
     }
 
@@ -63,7 +64,12 @@ impl State {
 
     #[inline(always)]
     pub fn render(&mut self, entities: &[Entity]) {
-        self.gpu
-            .render(&self.window, entities, &self.camera, &self.models);
+        self.gpu.render(
+            &self.window,
+            entities,
+            &self.camera,
+            &self.models,
+            &self.asset_models,
+        );
     }
 }

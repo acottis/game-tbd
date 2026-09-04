@@ -75,6 +75,54 @@ impl Mat4 {
             w: Vec4::new(0.0, 0.0, 0.0, 1.0),
         }
     }
+
+    pub fn from_rotation(rotation: Quat) -> Self {
+        let q = rotation.normalise();
+
+        let x2 = q.x + q.x;
+        let y2 = q.y + q.y;
+        let z2 = q.z + q.z;
+
+        let xx = q.x * x2;
+        let xy = q.x * y2;
+        let xz = q.x * z2;
+
+        let yy = q.y * y2;
+        let yz = q.y * z2;
+
+        let zz = q.z * z2;
+
+        let wx = q.w * x2;
+        let wy = q.w * y2;
+        let wz = q.w * z2;
+
+        Self {
+            x: Vec4::new(1.0 - (yy + zz), xy + wz, xz - wy, 0.0),
+            y: Vec4::new(xy - wz, 1.0 - (xx + zz), yz + wx, 0.0),
+            z: Vec4::new(xz + wy, yz - wx, 1.0 - (xx + yy), 0.0),
+            w: Vec4::new(0.0, 0.0, 0.0, 1.0),
+        }
+    }
+
+    pub fn from_scale_rotation_translation(scale: Vec3, rotation: Quat, translation: Vec3) -> Self {
+        let mut result = Self::from_rotation(rotation);
+
+        result.x.x *= scale.x;
+        result.x.y *= scale.x;
+        result.x.z *= scale.x;
+
+        result.y.x *= scale.y;
+        result.y.y *= scale.y;
+        result.y.z *= scale.y;
+
+        result.z.x *= scale.z;
+        result.z.y *= scale.z;
+        result.z.z *= scale.z;
+
+        result.w = Vec4::new(translation.x, translation.y, translation.z, 1.0);
+
+        result
+    }
 }
 
 impl std::ops::Mul<Vec4> for Mat4 {
@@ -272,6 +320,74 @@ impl core::ops::SubAssign for Vec3 {
         self.x -= rhs.x;
         self.y -= rhs.y;
         self.z -= rhs.z;
+    }
+}
+
+#[derive(Pod, Zeroable, Copy, Clone, Debug, PartialEq)]
+#[repr(C)]
+pub struct Quat {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl Quat {
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+
+    pub const fn identity() -> Self {
+        Self::new(0.0, 0.0, 0.0, 1.0)
+    }
+
+    pub fn normalise(self) -> Self {
+        let len = (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt();
+
+        if len == 0.0 {
+            return Self::identity();
+        }
+
+        Self::new(self.x / len, self.y / len, self.z / len, self.w / len)
+    }
+
+    pub fn slerp(self, mut rhs: Self, t: f32) -> Self {
+        let mut dot = self.x * rhs.x + self.y * rhs.y + self.z * rhs.z + self.w * rhs.w;
+
+        if dot < 0.0 {
+            rhs = Self::new(-rhs.x, -rhs.y, -rhs.z, -rhs.w);
+
+            dot = -dot;
+        }
+
+        if dot > 0.9995 {
+            return Self::new(
+                self.x + t * (rhs.x - self.x),
+                self.y + t * (rhs.y - self.y),
+                self.z + t * (rhs.z - self.z),
+                self.w + t * (rhs.w - self.w),
+            )
+            .normalise();
+        }
+
+        let theta = dot.acos();
+        let sin_theta = theta.sin();
+
+        let a = ((1.0 - t) * theta).sin() / sin_theta;
+        let b = (t * theta).sin() / sin_theta;
+
+        Self::new(
+            self.x * a + rhs.x * b,
+            self.y * a + rhs.y * b,
+            self.z * a + rhs.z * b,
+            self.w * a + rhs.w * b,
+        )
+    }
+}
+
+impl From<[f32; 4]> for Quat {
+    fn from(value: [f32; 4]) -> Self {
+        Self::new(value[0], value[1], value[2], value[3])
     }
 }
 

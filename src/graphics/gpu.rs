@@ -9,7 +9,7 @@ use winit::window::Window;
 
 use crate::{
     game::{Entity, ModelId},
-    graphics::assets::AssetModel,
+    graphics::assets::{AssetModel, AssetModels},
     maths::{Mat4, Vec3},
 };
 
@@ -126,10 +126,11 @@ impl Gpu {
         entities: &[Entity],
         camera: &Camera,
         models: &GpuModels,
+        asset_models: &AssetModels,
     ) {
         let frame = match self.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
             e => unimplemented!("{e:?}"),
         };
         let view = &frame.texture.create_view(&Default::default());
@@ -169,9 +170,18 @@ impl Gpu {
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in entities {
-                let transform =
+                let entity_transform =
                     Mat4::from_translation(entity.position()) * Mat4::from_scaling(entity.scale());
-                // Update entity buffer
+
+                let transform = match entity.animation {
+                    Some(ref animation) => {
+                        let clip = &asset_models.get(entity.model).animations[0];
+                        let (translation, rotation, scale) = clip.sample(animation.current_time);
+                        entity_transform
+                            * Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                    }
+                    None => entity_transform,
+                };
                 self.queue
                     .write_buffer(&entity.transform.buffer, 0, bytes_of(&transform));
 

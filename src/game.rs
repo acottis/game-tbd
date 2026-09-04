@@ -11,12 +11,28 @@ pub enum ModelId {
     Ground,
 }
 
+pub struct Animation {
+    pub current_time: f32,
+    duration: f32,
+}
+
+impl Animation {
+    pub const fn new(duration: f32) -> Self {
+        Self {
+            current_time: 0.0,
+            duration,
+        }
+    }
+}
+
 pub struct Entity {
     position: Vec3,
     scale: Vec3,
     physics: bool,
     falling: bool,
     pub model: ModelId,
+    pub animation: Option<Animation>,
+    // TODO: Leaky abstraction
     pub transform: ModelTransform,
 }
 
@@ -26,7 +42,6 @@ impl Entity {
         scale: Vec3,
         physics: bool,
         model: ModelId,
-        // TODO: Leaky abstraction
         transform: ModelTransform,
     ) -> Self {
         Self {
@@ -34,6 +49,7 @@ impl Entity {
             scale,
             physics,
             falling: false,
+            animation: None,
             model,
             transform,
         }
@@ -62,7 +78,8 @@ impl Entity {
             return;
         };
         self.move_y(delta_time, y);
-        self.falling = true
+        self.falling = true;
+        self.animation = Some(Animation::new(1.0));
     }
 
     const fn check_collision(&mut self) {
@@ -71,8 +88,19 @@ impl Entity {
             self.position.y = 0.0;
         }
     }
+
     fn apply_gravity(&mut self, delta_time: f32) {
         self.position += Vec3::new(0.0, GRAVITY, 0.0) * delta_time;
+    }
+
+    const fn animate(&mut self, delta_time: f32) {
+        if let Some(animation) = &mut self.animation {
+            animation.current_time += delta_time;
+
+            if animation.current_time >= animation.duration {
+                self.animation = None
+            }
+        }
     }
 }
 
@@ -88,6 +116,8 @@ impl Game {
 
     pub fn update(&mut self, delta_time: f32) {
         for entity in self.entities.iter_mut() {
+            entity.animate(delta_time);
+
             if entity.physics {
                 entity.apply_gravity(delta_time);
                 entity.check_collision();

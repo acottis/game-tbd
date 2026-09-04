@@ -82,7 +82,7 @@ impl App {
         }
     }
 
-    fn run_input(&mut self, event_loop: &ActiveEventLoop) {
+    fn handle_inputs(&mut self, event_loop: &ActiveEventLoop) {
         let state = unsafe { self.state.as_mut().unwrap_unchecked() };
         let player = &mut self.game.entities[1];
         let camera = &mut state.camera;
@@ -101,7 +101,7 @@ impl App {
             movement += camera.right_direction()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(self.delta_time, 2000.0);
+            player.jump(self.delta_time, 200.0);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(self.delta_time, 10.0)
@@ -136,10 +136,6 @@ impl App {
 
         camera.follow(target);
     }
-
-    fn run_game(&mut self) {
-        self.game.update(self.delta_time);
-    }
 }
 
 impl ApplicationHandler for App {
@@ -158,8 +154,8 @@ impl ApplicationHandler for App {
         log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
         self.last_frame_time = now;
 
-        self.run_input(event_loop);
-        self.run_game();
+        self.handle_inputs(event_loop);
+        self.game.update(self.delta_time);
         self.render();
     }
 
