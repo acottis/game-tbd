@@ -80,9 +80,9 @@ pub struct AnimationChannel {
 
 #[derive(Debug, Clone)]
 pub enum AnimationValues {
-    Translation(Vec<[f32; 3]>),
-    Rotation(Vec<[f32; 4]>),
-    Scale(Vec<[f32; 3]>),
+    Translation(Vec<Vec3>),
+    Rotation(Vec<Quat>),
+    Scale(Vec<Vec3>),
 }
 
 fn keyframes(times: &[f32], time: f32) -> (usize, usize, f32) {
@@ -111,23 +111,17 @@ fn keyframes(times: &[f32], time: f32) -> (usize, usize, f32) {
 
     (last, last, 0.0)
 }
-fn sample_quat(times: &[f32], values: &[[f32; 4]], time: f32) -> Quat {
+
+fn sample_vec3(times: &[f32], values: &[Vec3], time: f32) -> Vec3 {
     let (i0, i1, t) = keyframes(times, time);
-
-    let a = Quat::from_array(values[i0]);
-    let b = Quat::from_array(values[i1]);
-
-    a.slerp(b, t)
+    values[i0].lerp(values[i1], t)
 }
 
-fn sample_vec3(times: &[f32], values: &[[f32; 3]], time: f32) -> Vec3 {
+fn sample_quat(times: &[f32], values: &[Quat], time: f32) -> Quat {
     let (i0, i1, t) = keyframes(times, time);
-
-    let a = Vec3::from(values[i0]);
-    let b = Vec3::from(values[i1]);
-
-    a + (b - a) * t
+    values[i0].slerp(values[i1], t)
 }
+
 #[derive(Debug, Clone)]
 pub struct AnimationClip {
     pub channels: Vec<AnimationChannel>,

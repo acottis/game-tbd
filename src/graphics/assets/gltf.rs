@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use glam::Vec3;
+use glam::{Quat, Vec3};
 use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
@@ -10,7 +10,7 @@ use crate::graphics::{
     assets::{AnimationChannel, AnimationClip, AnimationValues, AssetModel},
 };
 
-fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> {
+fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
     if let Some(info) = info {
         let image = info.texture().source().source();
         match image {
@@ -32,7 +32,7 @@ fn load_texture(info: Option<Info>, buffer: &Vec<Data>) -> Option<DynamicImage> 
     }
 }
 
-fn load_animations(document: &Document, buffer: &Vec<Data>) -> Vec<AnimationClip> {
+fn load_animations(document: &Document, buffer: &[Data]) -> Vec<AnimationClip> {
     let mut animation_clips = Vec::new();
     for animation in document.animations() {
         let mut channels = Vec::new();
@@ -47,13 +47,13 @@ fn load_animations(document: &Document, buffer: &Vec<Data>) -> Vec<AnimationClip
 
             let values = match reader.read_outputs().unwrap() {
                 gltf::animation::util::ReadOutputs::Translations(values) => {
-                    AnimationValues::Translation(values.collect())
+                    AnimationValues::Translation(values.map(Vec3::from_array).collect())
                 }
                 gltf::animation::util::ReadOutputs::Rotations(values) => {
-                    AnimationValues::Rotation(values.into_f32().collect())
+                    AnimationValues::Rotation(values.into_f32().map(Quat::from_array).collect())
                 }
                 gltf::animation::util::ReadOutputs::Scales(values) => {
-                    AnimationValues::Scale(values.collect())
+                    AnimationValues::Translation(values.map(Vec3::from_array).collect())
                 }
                 _ => unimplemented!(),
             };
@@ -70,7 +70,7 @@ fn load_animations(document: &Document, buffer: &Vec<Data>) -> Vec<AnimationClip
     animation_clips
 }
 
-fn load_mesh(document: &Document, buffer: &Vec<Data>) -> Vec<Mesh> {
+fn load_mesh(document: &Document, buffer: &[Data]) -> Vec<Mesh> {
     let mut meshes = Vec::new();
 
     for mesh in document.meshes() {

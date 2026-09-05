@@ -89,6 +89,7 @@ impl Camera {
     pub fn zoom(&mut self, amount: f32) {
         let delta = self.position - self.target;
         let distance = delta.length();
+
         let new_distance = (distance - amount).clamp(MIN_ZOOM, MAX_ZOOM);
 
         self.position = self.target + delta.normalize_or_zero() * new_distance;
