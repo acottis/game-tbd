@@ -88,52 +88,49 @@ impl App {
 
         let mut movement = Vec3::ZERO;
         if self.input.is_pressed(KeyCode::KeyW) {
-            movement += camera.forward_direction()
-        }
-        if self.input.is_pressed(KeyCode::KeyA) {
-            movement -= camera.right_direction()
+            movement += camera.forward_planar()
         }
         if self.input.is_pressed(KeyCode::KeyS) {
-            movement -= camera.forward_direction()
+            movement -= camera.forward_planar()
+        }
+        if self.input.is_pressed(KeyCode::KeyA) {
+            movement -= camera.right()
         }
         if self.input.is_pressed(KeyCode::KeyD) {
-            movement += camera.right_direction()
+            movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(self.delta_time, 200.0);
+            player.jump(self.delta_time * 200.0);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
-            camera.move_forward(self.delta_time, 10.0)
+            camera.move_forward(self.delta_time * 10.0)
         }
         if self.input.is_pressed(KeyCode::ArrowLeft) {
-            camera.strafe(self.delta_time, -10.0);
+            camera.strafe(self.delta_time * -10.0);
         }
         if self.input.is_pressed(KeyCode::ArrowDown) {
-            camera.move_forward(self.delta_time, -10.0)
+            camera.move_forward(self.delta_time * -10.0)
         }
         if self.input.is_pressed(KeyCode::ArrowRight) {
-            camera.strafe(self.delta_time, 10.0);
+            camera.strafe(self.delta_time * 10.0);
         }
         if self.input.is_pressed(KeyCode::KeyU) {
-            camera.rotate_z(self.delta_time, PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::KeyH) {
-            camera.rotate_y(self.delta_time, -PI / 2.0)
+            camera.rotate_pitch(self.delta_time * PI / 2.0)
         }
         if self.input.is_pressed(KeyCode::KeyJ) {
-            camera.rotate_z(self.delta_time, -PI / 2.0)
+            camera.rotate_pitch(self.delta_time * -PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyH) {
+            camera.rotate_yaw(self.delta_time * -PI / 2.0)
         }
         if self.input.is_pressed(KeyCode::KeyK) {
-            camera.rotate_y(self.delta_time, PI / 2.0)
+            camera.rotate_yaw(self.delta_time * PI / 2.0)
         }
         if self.input.is_pressed(KeyCode::Escape) {
             event_loop.exit();
         }
-        player.move_direction(self.delta_time, 5.0, movement);
-        let mut target = player.position();
-        target.y = 0.;
-
-        camera.follow(target);
+        player.move_direction(self.delta_time * 5.0, movement);
+        camera.follow(player.position());
     }
 }
 
@@ -171,7 +168,8 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(_, direction) => {
-                    self.state.as_mut().unwrap().camera.zoom(direction);
+                    let state = unsafe { self.state.as_mut().unwrap_unchecked() };
+                    state.camera.zoom(direction);
                 }
                 MouseScrollDelta::PixelDelta(_) => (),
             },

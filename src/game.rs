@@ -61,24 +61,24 @@ impl Entity {
     pub const fn scale(&self) -> Vec3 {
         self.scale
     }
-    pub const fn move_x(&mut self, delta_time: f32, x: f32) {
-        self.position.x += x * delta_time;
+    pub const fn move_x(&mut self, distance: f32) {
+        self.position.x += distance;
     }
-    pub const fn move_y(&mut self, delta_time: f32, y: f32) {
-        self.position.y += y * delta_time;
+    pub const fn move_y(&mut self, distance: f32) {
+        self.position.y += distance;
     }
-    pub const fn move_z(&mut self, delta_time: f32, z: f32) {
-        self.position.z += z * delta_time;
+    pub const fn move_z(&mut self, distance: f32) {
+        self.position.z += distance;
     }
-    pub fn move_direction(&mut self, delta_time: f32, speed: f32, direction: Vec3) {
-        self.position += direction * speed * delta_time;
+    pub fn move_direction(&mut self, distance: f32, direction: Vec3) {
+        self.position += direction * distance;
     }
 
-    pub const fn jump(&mut self, delta_time: f32, y: f32) {
+    pub const fn jump(&mut self, distance: f32) {
         if self.falling {
             return;
         };
-        self.move_y(delta_time, y);
+        self.move_y(distance);
         self.falling = true;
         self.animation = Some(Animation::new(1.0));
     }

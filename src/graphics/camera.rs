@@ -1,7 +1,11 @@
 use std::f32::consts::PI;
 
-use glam::{Mat3, Mat4, Vec3, Vec4};
+use glam::camera::rh;
+use glam::{Mat4, Quat, Vec3};
 use winit::dpi::PhysicalSize;
+
+const MAX_ZOOM: f32 = 50.0;
+const MIN_ZOOM: f32 = 1.5;
 
 #[derive(Debug)]
 pub struct Camera {
@@ -30,108 +34,68 @@ impl Camera {
         }
     }
 
-    pub fn follow(&mut self, target: Vec3) {
-        let old_target = self.target;
-        let old_position = self.position;
+    pub fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {
+        self.aspect = size.width as f32 / size.height as f32
+    }
 
-        let offset = old_position - old_target;
+    pub fn follow(&mut self, target: Vec3) {
+        let offset = self.position - self.target;
 
         self.target = target;
         self.position = target + offset;
     }
-    pub fn forward_direction(&self) -> Vec3 {
+
+    pub fn forward(&self) -> Vec3 {
+        (self.target - self.position).normalize_or_zero()
+    }
+
+    pub fn forward_planar(&self) -> Vec3 {
         let mut forward = self.target - self.position;
         forward.y = 0.0;
-        forward.normalize()
-    }
-    pub fn right_direction(&self) -> Vec3 {
-        let forward = self.forward_direction();
-        forward.cross(self.up).normalize()
+        forward.normalize_or_zero()
     }
 
-    pub fn rotate_x(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::from_rotation_x(theta * delta_time);
+    pub fn right(&self) -> Vec3 {
+        self.forward().cross(self.up).normalize_or_zero()
+    }
+
+    /// Orbit camera around target horizontally
+    pub fn rotate_yaw(&mut self, angle: f32) {
+        let rotation = Quat::from_axis_angle(Vec3::Y, angle);
         let offset = self.position - self.target;
-
         self.position = self.target + rotation * offset;
     }
 
-    pub fn rotate_y(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::from_rotation_y(theta * delta_time);
+    /// Orbit camera around target vertically
+    pub fn rotate_pitch(&mut self, angle: f32) {
+        let right = self.right();
+        let rotation = Quat::from_axis_angle(right, angle);
         let offset = self.position - self.target;
-
         self.position = self.target + rotation * offset;
     }
 
-    pub fn rotate_z(&mut self, delta_time: f32, theta: f32) {
-        let rotation = Mat3::from_rotation_z(theta * delta_time);
-        let offset = self.position - self.target;
-
-        self.position = self.target + rotation * offset;
+    pub fn move_forward(&mut self, distance: f32) {
+        let delta = self.forward_planar() * distance;
+        self.position += delta;
+        self.target += delta;
     }
 
-    pub fn move_forward(&mut self, delta_time: f32, speed: f32) {
-        let forward = (self.target - self.position).normalize();
-        self.position += forward * speed * delta_time;
-    }
-
-    /// + is right, - is left
-    pub fn strafe(&mut self, delta_time: f32, speed: f32) {
-        let forward = (self.target - self.position).normalize();
-        let right = forward.cross(self.up).normalize();
-        //let right = self.up.cross(&forward).normalise();
-
-        let delta = right * speed * delta_time;
-
+    pub fn strafe(&mut self, distance: f32) {
+        let delta = self.right() * distance;
         self.position += delta;
         self.target += delta;
     }
 
     pub fn zoom(&mut self, amount: f32) {
-        let offset = self.position - self.target;
-        let direction = offset.normalize();
+        let delta = self.position - self.target;
+        let distance = delta.length();
+        let new_distance = (distance - amount).clamp(MIN_ZOOM, MAX_ZOOM);
 
-        self.position -= direction * amount;
+        self.position = self.target + delta.normalize_or_zero() * new_distance;
     }
 
-    fn view_rh(&self) -> Mat4 {
-        let forward = (self.target - self.position).normalize();
-        let right = forward.cross(self.up).normalize();
-        let up = right.cross(forward).normalize();
-
-        let projection_x = -right.dot(self.position);
-        let projection_y = -up.dot(self.position);
-        let projection_z = forward.dot(self.position);
-
-        Mat4::from_cols(
-            Vec4::new(right.x, up.x, -forward.x, 0.0),
-            Vec4::new(right.y, up.y, -forward.y, 0.0),
-            Vec4::new(right.z, up.z, -forward.z, 0.0),
-            Vec4::new(projection_x, projection_y, projection_z, 1.0),
-        )
-    }
-
-    fn perspective_rh(&self) -> Mat4 {
-        let f = 1.0 / (self.fovy * 0.5).tan();
-
-        let range = self.far - self.near;
-
-        let a = -self.far / range;
-        let b = -(self.far * self.near) / range;
-
-        Mat4::from_cols(
-            Vec4::new(f / self.aspect, 0.0, 0.0, 0.0),
-            Vec4::new(0.0, f, 0.0, 0.0),
-            Vec4::new(0.0, 0.0, a, -1.0),
-            Vec4::new(0.0, 0.0, b, 0.0),
-        )
-    }
-
-    pub fn view_perspective_rh(&self) -> Mat4 {
-        self.perspective_rh() * self.view_rh()
-    }
-
-    pub fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {
-        self.aspect = size.width as f32 / size.height as f32
+    pub fn projection_matrix(&self) -> Mat4 {
+        rh::proj::directx::perspective(self.fovy, self.aspect, self.near, self.far)
+            * rh::view::look_at_mat4(self.position, self.target, self.up)
     }
 }

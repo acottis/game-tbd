@@ -164,7 +164,7 @@ impl Gpu {
             self.queue.write_buffer(
                 &self.camera_buffer,
                 0,
-                bytes_of(&camera.view_perspective_rh()),
+                bytes_of(&camera.projection_matrix()),
             );
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
@@ -204,7 +204,7 @@ impl Gpu {
 fn load_camera(device: &Device, camera: &Camera) -> (BindGroup, Buffer, BindGroupLayout) {
     let buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
-        contents: bytes_of(&camera.view_perspective_rh()),
+        contents: bytes_of(&camera.projection_matrix()),
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
     });
 
