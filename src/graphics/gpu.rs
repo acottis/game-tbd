@@ -344,12 +344,12 @@ async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter,
     (adapter, device, queue)
 }
 
-pub struct ModelTransform {
+pub struct Transform {
     buffer: Buffer,
     bind_group: BindGroup,
 }
 
-impl ModelTransform {
+impl Transform {
     pub fn new(gpu: &Gpu) -> Self {
         let buffer = gpu.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Transform"),

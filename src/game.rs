@@ -1,6 +1,6 @@
 use glam::Vec3;
 
-use crate::graphics::ModelTransform;
+use crate::graphics;
 
 use crate::physics::GRAVITY;
 
@@ -28,13 +28,14 @@ impl Animation {
 
 pub struct Entity {
     position: Vec3,
+    velocity: Vec3,
     scale: Vec3,
     physics: bool,
     falling: bool,
     pub model: ModelId,
     pub animation: Option<Animation>,
     // TODO: Leaky abstraction
-    pub transform: ModelTransform,
+    pub transform: graphics::Transform,
 }
 
 impl Entity {
@@ -43,10 +44,11 @@ impl Entity {
         scale: Vec3,
         physics: bool,
         model: ModelId,
-        transform: ModelTransform,
+        transform: graphics::Transform,
     ) -> Self {
         Self {
             position,
+            velocity: Vec3::ZERO,
             scale,
             physics,
             falling: false,
@@ -74,24 +76,33 @@ impl Entity {
         self.position += direction * distance;
     }
 
-    pub const fn jump(&mut self, distance: f32) {
+    pub const fn jump(&mut self, velocity: f32) {
         if self.falling {
             return;
-        };
-        self.move_y(distance);
+        }
+
+        self.velocity.y = velocity;
         self.falling = true;
-        self.animation = Some(Animation::new(1.0));
+        // TODO: Hacked in infinite jump
+        self.animation = Some(Animation::new(1000.0));
     }
 
     const fn check_collision(&mut self) {
         if self.position.y <= 0.0 {
-            self.falling = false;
             self.position.y = 0.0;
+            self.velocity.y = 0.0;
+
+            self.falling = false;
+            self.animation = None;
         }
     }
 
     fn apply_gravity(&mut self, delta_time: f32) {
-        self.position += Vec3::new(0.0, GRAVITY, 0.0) * delta_time;
+        self.velocity += GRAVITY * delta_time;
+    }
+
+    fn apply_velocity(&mut self, delta_time: f32) {
+        self.position += self.velocity * delta_time;
     }
 
     const fn animate(&mut self, delta_time: f32) {
@@ -121,6 +132,7 @@ impl Game {
 
             if entity.physics {
                 entity.apply_gravity(delta_time);
+                entity.apply_velocity(delta_time);
                 entity.check_collision();
             }
         }

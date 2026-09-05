@@ -15,6 +15,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
+mod animation;
 mod game;
 mod graphics;
 mod input;
@@ -23,7 +24,7 @@ use graphics::State;
 
 use crate::{
     game::{Entity, ModelId},
-    graphics::ModelTransform,
+    graphics::Transform,
 };
 
 struct App {
@@ -50,17 +51,17 @@ impl App {
 
         let ground = Entity::new(
             Vec3::ZERO,
-            Vec3::splat(20.0),
+            Vec3::splat(80.0),
             false,
             ModelId::Ground,
-            ModelTransform::new(&state.gpu),
+            Transform::new(&state.gpu),
         );
         let cube = Entity::new(
             Vec3::ZERO,
             Vec3::splat(0.3),
             true,
             ModelId::Foo,
-            ModelTransform::new(&state.gpu),
+            Transform::new(&state.gpu),
         );
         self.game.entities.extend([ground, cube]);
 
@@ -100,7 +101,7 @@ impl App {
             movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(self.delta_time * 200.0);
+            player.jump(self.delta_time * 10000.0);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(self.delta_time * 10.0)

@@ -5,9 +5,9 @@ use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
-use crate::graphics::{
-    Vertex,
-    assets::{AnimationChannel, AnimationClip, AnimationValues, AssetModel},
+use crate::{
+    animation::{AnimationChannel, AnimationClip, AnimationValues},
+    graphics::{Vertex, assets::AssetModel},
 };
 
 fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
