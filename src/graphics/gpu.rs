@@ -22,6 +22,7 @@ pub struct Gpu {
     queue: Queue,
     render_pipeline: RenderPipeline,
     texture_layout: BindGroupLayout,
+    depth_view: TextureView,
     transform_layout: BindGroupLayout,
     camera_bind_group: BindGroup,
     camera_buffer: Buffer,
@@ -91,11 +92,33 @@ impl Gpu {
                 polygon_mode: PolygonMode::Fill,
                 conservative: false,
             },
-            depth_stencil: None,
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(CompareFunction::Less),
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
             multisample: MultisampleState::default(),
             cache: None,
             multiview_mask: None,
         });
+
+        let depth_texture = device.create_texture(&TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: Extent3d {
+                width: window_width,
+                height: window_height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Depth32Float,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
 
         log::info!("{:#?}", adapter.get_info());
 
@@ -105,6 +128,7 @@ impl Gpu {
             device,
             queue,
             texture_layout,
+            depth_view,
             transform_layout,
             render_pipeline,
             camera_bind_group,
@@ -118,6 +142,23 @@ impl Gpu {
         self.surface_config.height = height;
         self.surface_config.width = width;
         self.surface.configure(&self.device, &self.surface_config);
+
+        let depth_texture = self.device.create_texture(&TextureDescriptor {
+            label: Some("Depth Texture"),
+            size: Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Depth32Float,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        self.depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
     }
 
     pub fn render(
@@ -147,7 +188,14 @@ impl Gpu {
                 },
                 depth_slice: None,
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                view: &self.depth_view,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(1.0),
+                    store: StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,
