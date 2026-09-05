@@ -5,7 +5,6 @@ use std::{
 
 use game::Game;
 use glam::Vec3;
-use input::Input;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -15,16 +14,12 @@ use winit::{
     window::{Window, WindowId},
 };
 
-mod animation;
 mod game;
 mod graphics;
-mod input;
-mod physics;
 use graphics::State;
 
 use crate::{
-    game::{Entity, ModelId},
-    graphics::Transform,
+    game::{Entity, ModelId, input::Input}, graphics::Transform,
 };
 
 struct App {

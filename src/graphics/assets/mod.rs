@@ -5,7 +5,7 @@ use std::path::Path;
 pub use gltf::load;
 use image::DynamicImage;
 
-use crate::{animation::AnimationClip, game::ModelId};
+use crate::game::{ModelId, animation::AnimationClip};
 
 use super::{Vertex, gpu::MaterialUniform};
 

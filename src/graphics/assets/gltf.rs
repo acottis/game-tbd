@@ -6,7 +6,7 @@ use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
 use crate::{
-    animation::{AnimationChannel, AnimationClip, AnimationValues},
+    game::animation::{AnimationChannel, AnimationClip, AnimationValues},
     graphics::{Vertex, assets::AssetModel},
 };
 

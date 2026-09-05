@@ -2,7 +2,11 @@ use glam::Vec3;
 
 use crate::graphics;
 
-use crate::physics::GRAVITY;
+use physics::GRAVITY;
+
+pub mod animation;
+pub mod input;
+mod physics;
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
