@@ -98,7 +98,7 @@ impl App {
             movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(self.delta_time * 100.0);
+            player.jump(5.0);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(self.delta_time * 10.0)
@@ -141,12 +141,15 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
-        if now.duration_since(self.last_frame_time) <= Duration::from_millis(1000 / 24) {
-            return;
-        }
-        self.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();
-        log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
+        let delta = now.duration_since(self.last_frame_time);
+        // const FPS: u64 = 24;
+        // if delta <= Duration::from_millis(1000 / FPS) {
+        //     return;
+        // }
         self.last_frame_time = now;
+        self.delta_time = delta.as_secs_f32();
+
+        log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
 
         self.handle_inputs(event_loop);
         self.game.update(self.delta_time);

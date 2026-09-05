@@ -164,7 +164,7 @@ impl Gpu {
             self.queue.write_buffer(
                 &self.camera_buffer,
                 0,
-                bytes_of(&camera.projection_matrix()),
+                bytes_of(&camera.view_projection_matrix()),
             );
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
@@ -204,7 +204,7 @@ impl Gpu {
 fn load_camera(device: &Device, camera: &Camera) -> (BindGroup, Buffer, BindGroupLayout) {
     let buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
-        contents: bytes_of(&camera.projection_matrix()),
+        contents: bytes_of(&camera.view_projection_matrix()),
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
     });
 
@@ -511,7 +511,7 @@ impl MaterialUniform {
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct Vertex {
-    vec3: Vec3,
+    position: Vec3,
     normal: Vec3,
     uv: [f32; 2],
 }
@@ -519,8 +519,12 @@ impl Vertex {
     const ATTRIBUTES: [VertexAttribute; 3] =
         vertex_attr_array![0 => Float32x3, 1 => Float32x3 ,2 => Float32x2];
 
-    pub fn new(vec3: Vec3, normal: Vec3, uv: [f32; 2]) -> Self {
-        Self { vec3, normal, uv }
+    pub fn new(position: Vec3, normal: Vec3, uv: [f32; 2]) -> Self {
+        Self {
+            position,
+            normal,
+            uv,
+        }
     }
 
     const fn layout() -> VertexBufferLayout<'static> {

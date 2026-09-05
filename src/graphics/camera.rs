@@ -95,7 +95,7 @@ impl Camera {
         self.position = self.target + delta.normalize_or_zero() * new_distance;
     }
 
-    pub fn projection_matrix(&self) -> Mat4 {
+    pub fn view_projection_matrix(&self) -> Mat4 {
         rh::proj::directx::perspective(self.fovy, self.aspect, self.near, self.far)
             * rh::view::look_at_mat4(self.position, self.target, self.up)
     }
