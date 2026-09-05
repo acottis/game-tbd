@@ -83,7 +83,6 @@ impl AnimationClip {
                 }
             }
         }
-
         (translation, rotation, scale)
     }
 }

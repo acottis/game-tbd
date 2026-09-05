@@ -19,7 +19,8 @@ mod graphics;
 use graphics::State;
 
 use crate::{
-    game::{Entity, ModelId, input::Input}, graphics::Transform,
+    game::{Entity, ModelId, input::Input},
+    graphics::Transform,
 };
 
 struct App {
@@ -82,6 +83,7 @@ impl App {
         let player = &mut self.game.entities[1];
         let camera = &mut state.camera;
 
+        // Movement is relative to camera direction
         let mut movement = Vec3::ZERO;
         if self.input.is_pressed(KeyCode::KeyW) {
             movement += camera.forward_planar()
@@ -96,7 +98,7 @@ impl App {
             movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(self.delta_time * 10000.0);
+            player.jump(self.delta_time * 100.0);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(self.delta_time * 10.0)
@@ -139,9 +141,9 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
-        // if now.duration_since(self.last_frame_time) <= Duration::from_millis(1000 / 10) {
-        //     return;
-        // }
+        if now.duration_since(self.last_frame_time) <= Duration::from_millis(1000 / 24) {
+            return;
+        }
         self.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();
         log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
         self.last_frame_time = now;

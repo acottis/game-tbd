@@ -24,8 +24,8 @@ pub struct Camera {
 impl Camera {
     pub const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(-2.0, 2.0, 0.0),
-            target: Vec3::new(0.0, 1.0, 0.0),
+            position: Vec3::new(0.0, 2.0, -2.0),
+            target: Vec3::new(0.0, 1.25, 0.0),
             up: Vec3::new(0.0, 1.0, 0.0),
             fovy: PI / 4.0,
             aspect: window_size.width as f32 / window_size.height as f32,

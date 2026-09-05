@@ -53,7 +53,7 @@ fn load_animations(document: &Document, buffer: &[Data]) -> Vec<AnimationClip> {
                     AnimationValues::Rotation(values.into_f32().map(Quat::from_array).collect())
                 }
                 gltf::animation::util::ReadOutputs::Scales(values) => {
-                    AnimationValues::Translation(values.map(Vec3::from_array).collect())
+                    AnimationValues::Scale(values.map(Vec3::from_array).collect())
                 }
                 _ => unimplemented!(),
             };
