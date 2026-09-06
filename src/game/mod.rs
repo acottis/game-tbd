@@ -2,9 +2,13 @@ use glam::{Mat4, Vec3};
 
 use physics::GRAVITY;
 
-use crate::assets::{AssetModels, ModelId};
+use crate::{
+    assets::{AssetModels, ModelId},
+    game::camera::Camera,
+};
 
 pub mod animation;
+mod camera;
 pub mod input;
 mod physics;
 
@@ -42,7 +46,6 @@ impl Entity {
             model,
         }
     }
-
     pub fn move_direction(&mut self, distance: f32, direction: Vec3) {
         self.position += direction * distance;
     }
@@ -61,19 +64,6 @@ impl Entity {
     pub const fn position(&self) -> Vec3 {
         self.position
     }
-    const fn scale(&self) -> Vec3 {
-        self.scale
-    }
-    const fn move_x(&mut self, distance: f32) {
-        self.position.x += distance;
-    }
-    const fn move_y(&mut self, distance: f32) {
-        self.position.y += distance;
-    }
-    const fn move_z(&mut self, distance: f32) {
-        self.position.z += distance;
-    }
-
     const fn check_collision(&mut self) {
         if self.position.y <= 0.0 {
             self.position.y = 0.0;
@@ -138,10 +128,15 @@ impl Terrain {
 pub struct Game {
     pub terrain: Terrain,
     pub entities: Vec<Entity>,
+    pub camera: Camera,
 }
 
 impl Game {
     pub fn new() -> Self {
+        let camera = Camera::new(&winit::dpi::PhysicalSize {
+            width: 800,
+            height: 600,
+        });
         let mut entities = Vec::new();
         let cube = Entity::new(Vec3::new(0.0, 0.0, 0.0), Vec3::splat(0.3), ModelId::Foo);
         entities.extend([cube]);
@@ -149,6 +144,7 @@ impl Game {
         Self {
             terrain: Terrain::new(Vec3::ZERO, Vec3::splat(100.0), ModelId::Ground),
             entities,
+            camera,
         }
     }
 

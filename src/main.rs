@@ -11,12 +11,12 @@ use winit::{
     window::{Window, WindowId},
 };
 
+mod assets;
 mod game;
 mod graphics;
-mod assets;
 
-use graphics::State;
 use game::input::Input;
+use graphics::State;
 
 struct App {
     state: Option<State>,
@@ -54,13 +54,13 @@ impl App {
         if size.width * size.height != 0 {
             let state = unsafe { self.state.as_mut().unwrap_unchecked() };
             state.resize(size);
+            self.game.camera.set_aspect_ratio(&size);
         }
     }
 
     fn handle_inputs(&mut self, event_loop: &ActiveEventLoop) {
-        let state = unsafe { self.state.as_mut().unwrap_unchecked() };
         let player = &mut self.game.entities[0];
-        let camera = &mut state.camera;
+        let camera = &mut self.game.camera;
 
         // Movement is relative to camera direction
         let mut movement = Vec3::ZERO;
@@ -148,8 +148,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(_, direction) => {
-                    let state = unsafe { self.state.as_mut().unwrap_unchecked() };
-                    state.camera.zoom(direction);
+                    self.game.camera.zoom(direction);
                 }
                 MouseScrollDelta::PixelDelta(_) => (),
             },

@@ -11,7 +11,7 @@ use winit::window::Window;
 use crate::{
     assets::{AssetModel, AssetModels, Material, ModelId},
     game::Game,
-    graphics::{Camera, Light},
+    graphics::Light,
 };
 
 pub struct Gpu {
@@ -179,7 +179,6 @@ impl Gpu {
         &mut self,
         window: &Window,
         game: &Game,
-        camera: &Camera,
         models: &GpuModels,
         asset_models: &AssetModels,
     ) {
@@ -225,7 +224,7 @@ impl Gpu {
             self.queue.write_buffer(
                 &self.camera.buffer,
                 0,
-                bytes_of(&camera.view_projection_matrix()),
+                bytes_of(&game.camera.view_projection_matrix()),
             );
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
