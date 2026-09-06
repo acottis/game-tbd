@@ -6,9 +6,9 @@ use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
 use crate::{
-    game::animation::{AnimationChannel, AnimationClip, AnimationValues},
-    graphics::{Vertex, assets::AssetModel},
+    assets::AssetModel, game::animation::{AnimationChannel, AnimationClip, AnimationValues},
 };
+use crate::graphics::{Vertex};
 
 fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
     if let Some(info) = info {
@@ -139,5 +139,12 @@ mod tests {
         load("assets/foo.glb");
         load("assets/cube.glb");
         load("assets/ground.glb");
+    }
+
+    #[test]
+    fn foo() {
+        let ground = load("assets/ground.glb");
+        let mesh = ground.meshes.iter().next().unwrap();
+        println!("{}, {}", mesh.indices.len(), mesh.vertices.len());
     }
 }

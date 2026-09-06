@@ -1,7 +1,4 @@
-use std::{
-    f32::consts::PI,
-    time::{Duration, Instant},
-};
+use std::{f32::consts::PI, time::Instant};
 
 use game::Game;
 use glam::Vec3;
@@ -16,12 +13,10 @@ use winit::{
 
 mod game;
 mod graphics;
-use graphics::State;
+mod assets;
 
-use crate::{
-    game::{Entity, ModelId, input::Input},
-    graphics::Transform,
-};
+use graphics::State;
+use game::input::Input;
 
 struct App {
     state: Option<State>,
@@ -45,29 +40,13 @@ impl App {
     fn init(&mut self, window: Window) {
         let state = State::new(window);
 
-        let ground = Entity::new(
-            Vec3::ZERO,
-            Vec3::splat(80.0),
-            false,
-            ModelId::Ground,
-            Transform::new(&state.gpu),
-        );
-        let cube = Entity::new(
-            Vec3::ZERO,
-            Vec3::splat(0.3),
-            true,
-            ModelId::Foo,
-            Transform::new(&state.gpu),
-        );
-        self.game.entities.extend([ground, cube]);
-
         self.state = Some(state)
     }
 
     #[inline(always)]
     fn render(&mut self) {
         let state = unsafe { self.state.as_mut().unwrap_unchecked() };
-        state.render(&self.game.entities);
+        state.render(&self.game);
     }
 
     #[inline(always)]
@@ -80,7 +59,7 @@ impl App {
 
     fn handle_inputs(&mut self, event_loop: &ActiveEventLoop) {
         let state = unsafe { self.state.as_mut().unwrap_unchecked() };
-        let player = &mut self.game.entities[1];
+        let player = &mut self.game.entities[0];
         let camera = &mut state.camera;
 
         // Movement is relative to camera direction
@@ -143,7 +122,7 @@ impl ApplicationHandler for App {
         let now = Instant::now();
         let delta = now.duration_since(self.last_frame_time);
         // const FPS: u64 = 24;
-        // if delta <= Duration::from_millis(1000 / FPS) {
+        // if delta <= std::time::Duration::from_millis(1000 / FPS) {
         //     return;
         // }
         self.last_frame_time = now;

@@ -1,23 +1,15 @@
-use glam::Vec3;
-
-use crate::graphics;
+use glam::{Mat4, Vec3};
 
 use physics::GRAVITY;
+
+use crate::assets::{AssetModels, ModelId};
 
 pub mod animation;
 pub mod input;
 mod physics;
 
-#[derive(Clone, Copy)]
-#[repr(u8)]
-pub enum ModelId {
-    Foo,
-    Cube,
-    Ground,
-}
-
 pub struct Animation {
-    pub current_time: f32,
+    current_time: f32,
     duration: f32,
 }
 
@@ -34,48 +26,23 @@ pub struct Entity {
     position: Vec3,
     velocity: Vec3,
     scale: Vec3,
-    physics: bool,
     falling: bool,
+    animation: Option<Animation>,
     pub model: ModelId,
-    pub animation: Option<Animation>,
-    // TODO: Leaky abstraction
-    pub transform: graphics::Transform,
 }
 
 impl Entity {
-    pub fn new(
-        position: Vec3,
-        scale: Vec3,
-        physics: bool,
-        model: ModelId,
-        transform: graphics::Transform,
-    ) -> Self {
+    pub fn new(position: Vec3, scale: Vec3, model: ModelId) -> Self {
         Self {
             position,
             velocity: Vec3::ZERO,
             scale,
-            physics,
             falling: false,
             animation: None,
             model,
-            transform,
         }
     }
-    pub const fn position(&self) -> Vec3 {
-        self.position
-    }
-    pub const fn scale(&self) -> Vec3 {
-        self.scale
-    }
-    pub const fn move_x(&mut self, distance: f32) {
-        self.position.x += distance;
-    }
-    pub const fn move_y(&mut self, distance: f32) {
-        self.position.y += distance;
-    }
-    pub const fn move_z(&mut self, distance: f32) {
-        self.position.z += distance;
-    }
+
     pub fn move_direction(&mut self, distance: f32, direction: Vec3) {
         self.position += direction * distance;
     }
@@ -89,6 +56,22 @@ impl Entity {
         self.falling = true;
         // TODO: Hacked in infinite jump
         self.animation = Some(Animation::new(1000.0));
+    }
+
+    pub const fn position(&self) -> Vec3 {
+        self.position
+    }
+    const fn scale(&self) -> Vec3 {
+        self.scale
+    }
+    const fn move_x(&mut self, distance: f32) {
+        self.position.x += distance;
+    }
+    const fn move_y(&mut self, distance: f32) {
+        self.position.y += distance;
+    }
+    const fn move_z(&mut self, distance: f32) {
+        self.position.z += distance;
     }
 
     const fn check_collision(&mut self) {
@@ -118,15 +101,54 @@ impl Entity {
             }
         }
     }
+
+    pub fn transform(&self, models: &AssetModels) -> Mat4 {
+        let transform = Mat4::from_translation(self.position) * Mat4::from_scale(self.scale);
+
+        match self.animation {
+            Some(ref animation) => {
+                let clip = &models.get(self.model).animations[0];
+                let (translation, rotation, scale) = clip.sample(animation.current_time);
+                transform * Mat4::from_scale_rotation_translation(scale, rotation, translation)
+            }
+            None => transform,
+        }
+    }
+}
+
+pub struct Terrain {
+    position: Vec3,
+    scale: Vec3,
+    pub model: ModelId,
+}
+
+impl Terrain {
+    pub fn new(position: Vec3, scale: Vec3, model: ModelId) -> Self {
+        Self {
+            position,
+            scale,
+            model,
+        }
+    }
+    pub fn transform(&self) -> Mat4 {
+        Mat4::from_translation(self.position) * Mat4::from_scale(self.scale)
+    }
 }
 
 pub struct Game {
+    pub terrain: Terrain,
     pub entities: Vec<Entity>,
 }
+
 impl Game {
     pub fn new() -> Self {
+        let mut entities = Vec::new();
+        let cube = Entity::new(Vec3::new(0.0, 0.0, 0.0), Vec3::splat(0.3), ModelId::Foo);
+        entities.extend([cube]);
+
         Self {
-            entities: Vec::new(),
+            terrain: Terrain::new(Vec3::ZERO, Vec3::splat(100.0), ModelId::Ground),
+            entities,
         }
     }
 
@@ -134,11 +156,9 @@ impl Game {
         for entity in self.entities.iter_mut() {
             entity.animate(delta_time);
 
-            if entity.physics {
-                entity.apply_gravity(delta_time);
-                entity.apply_velocity(delta_time);
-                entity.check_collision();
-            }
+            entity.apply_gravity(delta_time);
+            entity.apply_velocity(delta_time);
+            entity.check_collision();
         }
     }
 }

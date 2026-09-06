@@ -4,18 +4,16 @@ use glam::Vec3;
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::game::Entity;
-use crate::graphics::assets::AssetModels;
+use crate::assets::AssetModels;
+use crate::game::Game;
 use crate::graphics::gpu::GpuModels;
 
-mod assets;
 mod camera;
 mod gpu;
 mod light;
 pub use camera::Camera;
-pub use gpu::Transform;
-pub use gpu::Vertex;
 pub use light::Light;
+pub use gpu::Vertex;
 
 pub struct State {
     pub window: Arc<Window>,
@@ -62,10 +60,10 @@ impl State {
     }
 
     #[inline(always)]
-    pub fn render(&mut self, entities: &[Entity]) {
+    pub fn render(&mut self, game: &Game) {
         self.gpu.render(
             &self.window,
-            entities,
+            game,
             &self.camera,
             &self.models,
             &self.asset_models,

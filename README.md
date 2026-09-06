@@ -2,11 +2,6 @@
 
 Not sure what game we are making yet!
 
-* wgpu and winit for rendering and surface
-* Any GPU backend! Metal/Vulkan/DirectX
-* wgsl for shaders
-* gltf for models/assets
-* Cross platform Windows/Linux/Mac
+# Collision Design
 
-Currently we have 3D world with lighting and a camera!
-
+1. Split terrain models from asset models?

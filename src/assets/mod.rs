@@ -5,15 +5,17 @@ use std::path::Path;
 pub use gltf::load;
 use image::DynamicImage;
 
-use crate::game::{ModelId, animation::AnimationClip};
+use crate::{game::animation::AnimationClip, graphics::Vertex};
 
-use super::{Vertex, gpu::MaterialUniform};
 
-impl From<&Material> for MaterialUniform {
-    fn from(m: &Material) -> Self {
-        MaterialUniform::new(m.base_colour, m.metallic, m.roughness, m.image.is_some())
-    }
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum ModelId {
+    Foo,
+    Cube,
+    Ground,
 }
+
 
 #[derive(Clone)]
 pub struct Material {

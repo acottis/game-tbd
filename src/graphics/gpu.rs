@@ -9,21 +9,24 @@ use wgpu::{
 use winit::window::Window;
 
 use crate::{
-    game::{Entity, ModelId},
-    graphics::assets::{AssetModel, AssetModels},
+    assets::{AssetModel, AssetModels, Material, ModelId},
+    game::Game,
+    graphics::{Camera, Light},
 };
-
-use super::{Camera, Light, assets};
 
 pub struct Gpu {
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
     device: Device,
     queue: Queue,
+
     render_pipeline: RenderPipeline,
-    texture_layout: BindGroupLayout,
+
     depth_view: TextureView,
+
+    texture_layout: BindGroupLayout,
     transform_layout: BindGroupLayout,
+
     camera_bind_group: BindGroup,
     camera_buffer: Buffer,
     light_bind_group: BindGroup,
@@ -127,10 +130,10 @@ impl Gpu {
             surface_config,
             device,
             queue,
+            render_pipeline,
             texture_layout,
             depth_view,
             transform_layout,
-            render_pipeline,
             camera_bind_group,
             camera_buffer,
             light_bind_group,
@@ -164,7 +167,7 @@ impl Gpu {
     pub fn render(
         &mut self,
         window: &Window,
-        entities: &[Entity],
+        game: &Game,
         camera: &Camera,
         models: &GpuModels,
         asset_models: &AssetModels,
@@ -183,7 +186,6 @@ impl Gpu {
                 resolve_target: None,
                 ops: Operations {
                     load: LoadOp::Clear(Default::default()),
-                    // WARNING: This is important to vulkan but not dx12
                     store: StoreOp::Store,
                 },
                 depth_slice: None,
@@ -217,31 +219,36 @@ impl Gpu {
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
-            for entity in entities {
-                let entity_transform =
-                    Mat4::from_translation(entity.position()) * Mat4::from_scale(entity.scale());
+            for entity in &game.entities {
+                let entity_transform = entity.transform(asset_models);
 
-                let transform = match entity.animation {
-                    Some(ref animation) => {
-                        let clip = &asset_models.get(entity.model).animations[0];
-                        let (translation, rotation, scale) = clip.sample(animation.current_time);
-                        entity_transform
-                            * Mat4::from_scale_rotation_translation(scale, rotation, translation)
-                    }
-                    None => entity_transform,
-                };
+                // Transform the model
+                let gpu_transform = Transform::new(self);
+                render_pass.set_bind_group(3, &gpu_transform.bind_group, &[]);
                 self.queue
-                    .write_buffer(&entity.transform.buffer, 0, bytes_of(&transform));
+                    .write_buffer(&gpu_transform.buffer, 0, bytes_of(&entity_transform));
 
+                // The model and model textures
                 let model = models.get(entity.model);
                 render_pass.set_bind_group(2, &model.bind_group, &[]);
-                render_pass.set_bind_group(3, &entity.transform.bind_group, &[]);
-
                 render_pass.set_vertex_buffer(0, model.vertex.slice(..));
-
                 render_pass.set_index_buffer(model.index.slice(..), IndexFormat::Uint32);
                 render_pass.draw_indexed(0..model.indices_len, 0, 0..1);
             }
+
+            // TODO: Tidy Terrain
+            let terrain_transform = game.terrain.transform();
+
+            let gpu_transform = Transform::new(self);
+            render_pass.set_bind_group(3, &gpu_transform.bind_group, &[]);
+            self.queue
+                .write_buffer(&gpu_transform.buffer, 0, bytes_of(&terrain_transform));
+
+            let model = models.get(game.terrain.model);
+            render_pass.set_bind_group(2, &model.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, model.vertex.slice(..));
+            render_pass.set_index_buffer(model.index.slice(..), IndexFormat::Uint32);
+            render_pass.draw_indexed(0..model.indices_len, 0, 0..1);
         }
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
@@ -249,6 +256,7 @@ impl Gpu {
     }
 }
 
+/// TODO: Delete this
 fn load_camera(device: &Device, camera: &Camera) -> (BindGroup, Buffer, BindGroupLayout) {
     let buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: None,
@@ -425,7 +433,7 @@ pub struct GpuModel {
 }
 
 impl GpuModel {
-    pub fn load(gpu: &Gpu, model: &assets::AssetModel) -> Self {
+    pub fn load(gpu: &Gpu, model: &AssetModel) -> Self {
         // TODO: Handle more than one mesh
         let model = model.meshes.first().unwrap();
 
@@ -553,6 +561,12 @@ impl MaterialUniform {
             has_texture: has_texture as u32,
             _padding: Default::default(),
         }
+    }
+}
+
+impl From<&Material> for MaterialUniform {
+    fn from(m: &Material) -> Self {
+        MaterialUniform::new(m.base_colour, m.metallic, m.roughness, m.image.is_some())
     }
 }
 
