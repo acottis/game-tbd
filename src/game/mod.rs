@@ -4,12 +4,13 @@ use physics::GRAVITY;
 
 use crate::{
     assets::{AssetModels, ModelId},
-    game::camera::Camera,
+    game::{camera::Camera, light::Light},
 };
 
 pub mod animation;
 mod camera;
 pub mod input;
+pub mod light;
 mod physics;
 
 pub struct Animation {
@@ -126,9 +127,10 @@ impl Terrain {
 }
 
 pub struct Game {
-    pub terrain: Terrain,
     pub entities: Vec<Entity>,
+    pub terrain: Terrain,
     pub camera: Camera,
+    pub light: Light,
 }
 
 impl Game {
@@ -137,14 +139,17 @@ impl Game {
             width: 800,
             height: 600,
         });
+        let light = Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), 0.9);
+
         let mut entities = Vec::new();
         let cube = Entity::new(Vec3::new(0.0, 0.0, 0.0), Vec3::splat(0.3), ModelId::Foo);
         entities.extend([cube]);
 
         Self {
-            terrain: Terrain::new(Vec3::ZERO, Vec3::splat(100.0), ModelId::Ground),
             entities,
+            terrain: Terrain::new(Vec3::ZERO, Vec3::splat(100.0), ModelId::Ground),
             camera,
+            light,
         }
     }
 

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use glam::Vec3;
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -9,9 +8,7 @@ use crate::game::Game;
 use crate::graphics::gpu::GpuModels;
 
 mod gpu;
-mod light;
 pub use gpu::Vertex;
-pub use light::Light;
 
 pub struct State {
     pub window: Arc<Window>,
@@ -25,14 +22,7 @@ impl State {
         let window = Arc::new(window);
         let window_size = window.inner_size();
 
-        let light = Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), 0.9);
-
-        let gpu = Gpu::new(
-            window.clone(),
-            window_size.width,
-            window_size.height,
-            &light,
-        );
+        let gpu = Gpu::new(window.clone(), window_size.width, window_size.height);
 
         let asset_models =
             AssetModels::load(["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"]);

@@ -38,9 +38,7 @@ impl App {
     }
 
     fn init(&mut self, window: Window) {
-        let state = State::new(window);
-
-        self.state = Some(state)
+        self.state = Some(State::new(window))
     }
 
     #[inline(always)]

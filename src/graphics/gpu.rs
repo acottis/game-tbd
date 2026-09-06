@@ -10,8 +10,7 @@ use winit::window::Window;
 
 use crate::{
     assets::{AssetModel, AssetModels, Material, ModelId},
-    game::Game,
-    graphics::Light,
+    game::{Game, light::Light},
 };
 
 pub struct Gpu {
@@ -30,7 +29,7 @@ pub struct Gpu {
     camera: Transform,
 
     light_bind_group: BindGroup,
-    _light_buffer: Buffer,
+    light_buffer: Buffer,
 }
 
 impl Gpu {
@@ -38,7 +37,6 @@ impl Gpu {
         window: impl Into<SurfaceTarget<'static>>,
         window_width: u32,
         window_height: u32,
-        light: &Light,
     ) -> Self {
         let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance.create_surface(window).unwrap();
@@ -50,22 +48,10 @@ impl Gpu {
             .unwrap();
         surface.configure(&device, &surface_config);
 
-        let camera_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Camera"),
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                count: None,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
-                },
-            }],
-        });
-
+        let camera_layout = camera_layout(&device);
         let camera = Transform::new(&device, &camera_layout, Some("camera"));
-        let (light_bind_group, _light_buffer, light_layout) = load_light(&device, light);
+
+        let (light_bind_group, light_buffer, light_layout) = load_light(&device);
 
         let texture_layout = texture_layout(&device);
         let transform_layout = transform_layout(&device);
@@ -148,7 +134,7 @@ impl Gpu {
             transform_layout,
             camera,
             light_bind_group,
-            _light_buffer,
+            light_buffer,
         }
     }
 
@@ -227,6 +213,9 @@ impl Gpu {
                 bytes_of(&game.camera.view_projection_matrix()),
             );
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            // Update light buffer
+            self.queue
+                .write_buffer(&self.light_buffer, 0, bytes_of(&game.light));
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in &game.entities {
@@ -264,37 +253,6 @@ impl Gpu {
         window.pre_present_notify();
         self.queue.present(frame);
     }
-}
-
-fn load_light(device: &Device, light: &Light) -> (BindGroup, Buffer, BindGroupLayout) {
-    let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("Light"),
-        entries: &[BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::FRAGMENT,
-            count: None,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: NonZeroU64::new(size_of::<Light>() as u64),
-            },
-        }],
-    });
-    let buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Light"),
-        contents: bytes_of(light),
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-    });
-    let bind_group = device.create_bind_group(&BindGroupDescriptor {
-        label: Some("Light"),
-        entries: &[BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }],
-        layout: &layout,
-    });
-
-    (bind_group, buffer, layout)
 }
 
 fn texture_layout(device: &Device) -> BindGroupLayout {
@@ -351,6 +309,22 @@ fn transform_layout(device: &Device) -> BindGroupLayout {
     device.create_bind_group_layout(&transform_layout_descriptor)
 }
 
+fn camera_layout(device: &Device) -> BindGroupLayout {
+    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("Camera"),
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX,
+            count: None,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+            },
+        }],
+    })
+}
+
 async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter, Device, Queue) {
     let adapter = instance
         .request_adapter(&RequestAdapterOptions {
@@ -373,6 +347,36 @@ async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter,
         .await
         .unwrap();
     (adapter, device, queue)
+}
+fn load_light(device: &Device) -> (BindGroup, Buffer, BindGroupLayout) {
+    let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("Light"),
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::FRAGMENT,
+            count: None,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: NonZeroU64::new(Light::SIZE as u64),
+            },
+        }],
+    });
+    let buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Light"),
+        contents: &[0u8; Light::SIZE],
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+    });
+    let bind_group = device.create_bind_group(&BindGroupDescriptor {
+        label: Some("Light"),
+        entries: &[BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+        layout: &layout,
+    });
+
+    (bind_group, buffer, layout)
 }
 
 pub struct Transform {

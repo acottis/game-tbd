@@ -11,6 +11,8 @@ pub struct Light {
 }
 
 impl Light {
+    pub const SIZE: usize = size_of::<Self>();
+
     pub fn new(position: Vec3, color: Vec3, intensity: f32) -> Self {
         Light {
             position,
