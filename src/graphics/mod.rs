@@ -12,8 +12,8 @@ mod camera;
 mod gpu;
 mod light;
 pub use camera::Camera;
-pub use light::Light;
 pub use gpu::Vertex;
+pub use light::Light;
 
 pub struct State {
     pub window: Arc<Window>,
@@ -35,7 +35,6 @@ impl State {
             window.clone(),
             window_size.width,
             window_size.height,
-            &camera,
             &light,
         );
 

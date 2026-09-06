@@ -27,8 +27,8 @@ pub struct Gpu {
     texture_layout: BindGroupLayout,
     transform_layout: BindGroupLayout,
 
-    camera_bind_group: BindGroup,
-    camera_buffer: Buffer,
+    camera: Transform,
+
     light_bind_group: BindGroup,
     _light_buffer: Buffer,
 }
@@ -38,7 +38,6 @@ impl Gpu {
         window: impl Into<SurfaceTarget<'static>>,
         window_width: u32,
         window_height: u32,
-        camera: &Camera,
         light: &Light,
     ) -> Self {
         let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
@@ -51,8 +50,21 @@ impl Gpu {
             .unwrap();
         surface.configure(&device, &surface_config);
 
-        let (camera_bind_group, camera_buffer, camera_layout) = load_camera(&device, camera);
+        let camera_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Camera"),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                count: None,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                },
+            }],
+        });
 
+        let camera = Transform::new(&device, &camera_layout, Some("camera"));
         let (light_bind_group, _light_buffer, light_layout) = load_light(&device, light);
 
         let texture_layout = texture_layout(&device);
@@ -134,8 +146,7 @@ impl Gpu {
             texture_layout,
             depth_view,
             transform_layout,
-            camera_bind_group,
-            camera_buffer,
+            camera,
             light_bind_group,
             _light_buffer,
         }
@@ -212,18 +223,18 @@ impl Gpu {
 
             // Update camera buffer
             self.queue.write_buffer(
-                &self.camera_buffer,
+                &self.camera.buffer,
                 0,
                 bytes_of(&camera.view_projection_matrix()),
             );
-            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in &game.entities {
                 let entity_transform = entity.transform(asset_models);
 
                 // Transform the model
-                let gpu_transform = Transform::new(self);
+                let gpu_transform = Transform::new(&self.device, &self.transform_layout, None);
                 render_pass.set_bind_group(3, &gpu_transform.bind_group, &[]);
                 self.queue
                     .write_buffer(&gpu_transform.buffer, 0, bytes_of(&entity_transform));
@@ -239,7 +250,7 @@ impl Gpu {
             // TODO: Tidy Terrain
             let terrain_transform = game.terrain.transform();
 
-            let gpu_transform = Transform::new(self);
+            let gpu_transform = Transform::new(&self.device, &self.transform_layout, None);
             render_pass.set_bind_group(3, &gpu_transform.bind_group, &[]);
             self.queue
                 .write_buffer(&gpu_transform.buffer, 0, bytes_of(&terrain_transform));
@@ -256,47 +267,7 @@ impl Gpu {
     }
 }
 
-/// TODO: Delete this
-fn load_camera(device: &Device, camera: &Camera) -> (BindGroup, Buffer, BindGroupLayout) {
-    let buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: None,
-        contents: bytes_of(&camera.view_projection_matrix()),
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-    });
-
-    let min_binding_size = NonZeroU64::new(size_of::<Mat4>() as u64);
-    let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("Camera"),
-        entries: &[BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::VERTEX,
-            count: None,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size,
-            },
-        }],
-    });
-    let bind_group = device.create_bind_group(&BindGroupDescriptor {
-        label: Some("Camera"),
-        layout: &layout,
-        entries: &[BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }],
-    });
-    (bind_group, buffer, layout)
-}
-
 fn load_light(device: &Device, light: &Light) -> (BindGroup, Buffer, BindGroupLayout) {
-    let buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Light"),
-        contents: bytes_of(light),
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-    });
-
-    let min_binding_size = NonZeroU64::new(size_of::<Light>() as u64);
     let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("Light"),
         entries: &[BindGroupLayoutEntry {
@@ -306,9 +277,14 @@ fn load_light(device: &Device, light: &Light) -> (BindGroup, Buffer, BindGroupLa
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Uniform,
                 has_dynamic_offset: false,
-                min_binding_size,
+                min_binding_size: NonZeroU64::new(size_of::<Light>() as u64),
             },
         }],
+    });
+    let buffer = device.create_buffer_init(&BufferInitDescriptor {
+        label: Some("Light"),
+        contents: bytes_of(light),
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
     });
     let bind_group = device.create_bind_group(&BindGroupDescriptor {
         label: Some("Light"),
@@ -406,15 +382,15 @@ pub struct Transform {
 }
 
 impl Transform {
-    pub fn new(gpu: &Gpu) -> Self {
-        let buffer = gpu.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Transform"),
+    pub fn new(device: &Device, layout: &BindGroupLayout, label: Option<&str>) -> Self {
+        let buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             contents: bytes_of(&Mat4::IDENTITY),
         });
-        let bind_group = gpu.device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Transform"),
-            layout: &gpu.transform_layout,
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label,
+            layout,
             entries: &[BindGroupEntry {
                 binding: 0,
                 resource: buffer.as_entire_binding(),
