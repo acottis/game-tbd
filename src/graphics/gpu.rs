@@ -235,7 +235,7 @@ impl Gpu {
                 render_pass.draw_indexed(0..model.indices_len, 0, 0..1);
             }
 
-            // TODO: Tidy Terrain
+            // TODO: Make terrain a bit more DRY
             let terrain_transform = game.terrain.transform();
 
             let gpu_transform = Transform::new(&self.device, &self.transform_layout, None);

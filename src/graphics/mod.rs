@@ -24,6 +24,7 @@ impl State {
 
         let gpu = Gpu::new(window.clone(), window_size.width, window_size.height);
 
+        // TODO: Does this belong here?
         let asset_models =
             AssetModels::load(["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"]);
         // TODO: Avoid this clone
