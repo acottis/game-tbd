@@ -4,7 +4,7 @@ use physics::GRAVITY;
 
 use crate::{
     assets::{AssetModels, ModelId},
-    game::{camera::Camera, light::Light},
+    game::{camera::Camera, light::Light, physics::GroundTerrainCollider},
 };
 
 pub mod animation;
@@ -13,8 +13,13 @@ pub mod input;
 pub mod light;
 mod physics;
 
+#[inline(always)]
+fn transform(position: Vec3, scale: Vec3) -> Mat4 {
+    Mat4::from_translation(position) * Mat4::from_scale(scale)
+}
+
 pub struct Animation {
-    current_time: f32,
+    pub current_time: f32,
     duration: f32,
 }
 
@@ -32,7 +37,7 @@ pub struct Entity {
     velocity: Vec3,
     scale: Vec3,
     falling: bool,
-    animation: Option<Animation>,
+    pub animation: Option<Animation>,
     pub model: ModelId,
 }
 
@@ -65,9 +70,16 @@ impl Entity {
     pub const fn position(&self) -> Vec3 {
         self.position
     }
-    const fn check_collision(&mut self) {
-        if self.position.y <= 0.0 {
-            self.position.y = 0.0;
+
+    fn check_collision(&mut self, terrain: &GroundTerrainCollider) {
+        // None means OOB
+        let Some(height) = terrain.height_at(self.position) else {
+            return;
+        };
+
+        if self.velocity.y <= 0.0 && self.position.y <= height {
+            self.position.y = height;
+
             self.velocity.y = 0.0;
 
             self.falling = false;
@@ -93,32 +105,28 @@ impl Entity {
         }
     }
 
-    pub fn transform(&self, models: &AssetModels) -> Mat4 {
-        let transform = Mat4::from_translation(self.position) * Mat4::from_scale(self.scale);
-
-        match self.animation {
-            Some(ref animation) => {
-                let clip = &models.get(self.model).animations[0];
-                let (translation, rotation, scale) = clip.sample(animation.current_time);
-                transform * Mat4::from_scale_rotation_translation(scale, rotation, translation)
-            }
-            None => transform,
-        }
+    pub fn transform(&self) -> Mat4 {
+        Mat4::from_translation(self.position) * Mat4::from_scale(self.scale)
     }
 }
 
 pub struct Terrain {
     position: Vec3,
     scale: Vec3,
+    collider: GroundTerrainCollider,
     pub model: ModelId,
 }
 
 impl Terrain {
-    pub fn new(position: Vec3, scale: Vec3, model: ModelId) -> Self {
+    pub fn new(assets: &AssetModels, position: Vec3, scale: Vec3, model: ModelId) -> Self {
+        let transform = transform(position, scale);
+        let asset = assets.get(ModelId::Ground);
+        let collider = GroundTerrainCollider::new(asset, transform);
         Self {
             position,
             scale,
             model,
+            collider,
         }
     }
     pub fn transform(&self) -> Mat4 {
@@ -134,7 +142,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new() -> Self {
+    pub fn new(assets: &AssetModels) -> Self {
         let camera = Camera::new(&winit::dpi::PhysicalSize {
             width: 800,
             height: 600,
@@ -147,19 +155,19 @@ impl Game {
 
         Self {
             entities,
-            terrain: Terrain::new(Vec3::ZERO, Vec3::splat(100.0), ModelId::Ground),
+            terrain: Terrain::new(assets, Vec3::ZERO, Vec3::splat(50.0), ModelId::Ground),
             camera,
             light,
         }
     }
 
     pub fn update(&mut self, delta_time: f32) {
-        for entity in self.entities.iter_mut() {
+        for entity in &mut self.entities {
             entity.animate(delta_time);
 
             entity.apply_gravity(delta_time);
             entity.apply_velocity(delta_time);
-            entity.check_collision();
+            entity.check_collision(&self.terrain.collider);
         }
     }
 }

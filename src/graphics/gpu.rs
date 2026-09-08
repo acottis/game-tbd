@@ -219,7 +219,18 @@ impl Gpu {
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             for entity in &game.entities {
-                let entity_transform = entity.transform(asset_models);
+                let model = models.get(entity.model);
+
+                let entity_transform = entity.transform();
+                let entity_transform = match entity.animation {
+                    Some(ref animation) => {
+                        let clip = &asset_models.get(entity.model).animations[0];
+                        let (translation, rotation, scale) = clip.sample(animation.current_time);
+                        entity_transform
+                            * Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                    }
+                    None => entity_transform,
+                };
 
                 // Transform the model
                 let gpu_transform = Transform::new(&self.device, &self.transform_layout, None);
@@ -228,7 +239,6 @@ impl Gpu {
                     .write_buffer(&gpu_transform.buffer, 0, bytes_of(&entity_transform));
 
                 // The model and model textures
-                let model = models.get(entity.model);
                 render_pass.set_bind_group(2, &model.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, model.vertex.slice(..));
                 render_pass.set_index_buffer(model.index.slice(..), IndexFormat::Uint32);
@@ -566,6 +576,11 @@ impl Vertex {
             normal,
             uv,
         }
+    }
+
+    #[inline(always)]
+    pub fn position(&self) -> Vec3 {
+        self.position
     }
 
     const fn layout() -> VertexBufferLayout<'static> {

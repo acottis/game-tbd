@@ -18,19 +18,24 @@ mod graphics;
 use game::input::Input;
 use graphics::State;
 
+use crate::assets::AssetModels;
+
 struct App {
     state: Option<State>,
     game: Game,
     input: Input,
+    assets: AssetModels,
     last_frame_time: Instant,
     delta_time: f32,
 }
 
 impl App {
     fn new() -> Self {
+        let assets = AssetModels::load(["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"]);
         Self {
             state: None,
-            game: Game::new(),
+            game: Game::new(&assets),
+            assets: assets,
             input: Input::new(),
             last_frame_time: Instant::now(),
             delta_time: 0.0,
@@ -38,13 +43,13 @@ impl App {
     }
 
     fn init(&mut self, window: Window) {
-        self.state = Some(State::new(window))
+        self.state = Some(State::new(window, &self.assets));
     }
 
     #[inline(always)]
     fn render(&mut self) {
         let state = unsafe { self.state.as_mut().unwrap_unchecked() };
-        state.render(&self.game);
+        state.render(&self.game, &self.assets);
     }
 
     #[inline(always)]

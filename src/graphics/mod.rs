@@ -14,27 +14,22 @@ pub struct State {
     pub window: Arc<Window>,
     pub gpu: Gpu,
     pub models: GpuModels,
-    pub asset_models: AssetModels,
 }
 
 impl State {
-    pub fn new(window: Window) -> Self {
+    pub fn new(window: Window, assets: &AssetModels) -> Self {
         let window = Arc::new(window);
         let window_size = window.inner_size();
 
         let gpu = Gpu::new(window.clone(), window_size.width, window_size.height);
 
-        // TODO: Does this belong here?
-        let asset_models =
-            AssetModels::load(["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"]);
         // TODO: Avoid this clone
-        let models = GpuModels::load(&gpu, asset_models.0.clone());
+        let models = GpuModels::load(&gpu, assets.0.clone());
 
         Self {
             window,
             gpu,
             models,
-            asset_models,
         }
     }
 
@@ -44,8 +39,7 @@ impl State {
     }
 
     #[inline(always)]
-    pub fn render(&mut self, game: &Game) {
-        self.gpu
-            .render(&self.window, game, &self.models, &self.asset_models);
+    pub fn render(&mut self, game: &Game, assets: &AssetModels) {
+        self.gpu.render(&self.window, game, &self.models, assets);
     }
 }
