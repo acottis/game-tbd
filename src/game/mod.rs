@@ -3,8 +3,12 @@ use glam::{Mat4, Vec3};
 use physics::GRAVITY;
 
 use crate::{
-    assets::{AssetModels, ModelId},
-    game::{camera::Camera, light::Light, physics::GroundTerrainCollider},
+    assets::{AssetModel, AssetModels, ModelId},
+    game::{
+        camera::Camera,
+        light::Light,
+        physics::{BoundingBox, GroundCollision},
+    },
 };
 
 pub mod animation;
@@ -37,12 +41,13 @@ pub struct Entity {
     velocity: Vec3,
     scale: Vec3,
     falling: bool,
+    bounding_box: BoundingBox,
     pub animation: Option<Animation>,
     pub model: ModelId,
 }
 
 impl Entity {
-    pub fn new(position: Vec3, scale: Vec3, model: ModelId) -> Self {
+    pub fn new(model: ModelId, position: Vec3, scale: Vec3, bounding_box: BoundingBox) -> Self {
         Self {
             position,
             velocity: Vec3::ZERO,
@@ -50,8 +55,13 @@ impl Entity {
             falling: false,
             animation: None,
             model,
+            bounding_box,
         }
     }
+    pub const fn position(&self) -> Vec3 {
+        self.position
+    }
+
     pub fn move_direction(&mut self, distance: f32, direction: Vec3) {
         self.position += direction * distance;
     }
@@ -63,23 +73,22 @@ impl Entity {
 
         self.velocity.y = velocity;
         self.falling = true;
-        // TODO: Hacked in infinite jump
+        // TODO: Hacked in infinite jump animation
         self.animation = Some(Animation::new(1000.0));
     }
 
-    pub const fn position(&self) -> Vec3 {
-        self.position
+    fn bounds(&self) -> BoundingBox {
+        self.bounding_box.transform(self.transform())
     }
 
-    fn check_collision(&mut self, terrain: &GroundTerrainCollider) {
+    fn check_collision(&mut self, terrain: &GroundCollision) {
         // None means OOB
         let Some(height) = terrain.height_at(self.position) else {
             return;
         };
 
-        if self.velocity.y <= 0.0 && self.position.y <= height {
-            self.position.y = height;
-
+        if self.velocity.y <= 0.0 && self.bounds().min.y <= height {
+            self.position.y += height - self.bounds().min.y;
             self.velocity.y = 0.0;
 
             self.falling = false;
@@ -113,15 +122,14 @@ impl Entity {
 pub struct Terrain {
     position: Vec3,
     scale: Vec3,
-    collider: GroundTerrainCollider,
+    collider: GroundCollision,
     pub model: ModelId,
 }
 
 impl Terrain {
-    pub fn new(assets: &AssetModels, position: Vec3, scale: Vec3, model: ModelId) -> Self {
+    pub fn new(model: ModelId, position: Vec3, scale: Vec3, asset: &AssetModel) -> Self {
         let transform = transform(position, scale);
-        let asset = assets.get(ModelId::Ground);
-        let collider = GroundTerrainCollider::new(asset, transform);
+        let collider = GroundCollision::new(asset, transform);
         Self {
             position,
             scale,
@@ -149,13 +157,19 @@ impl Game {
         });
         let light = Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), 0.9);
 
-        let mut entities = Vec::new();
-        let cube = Entity::new(Vec3::new(0.0, 0.0, 0.0), Vec3::splat(0.3), ModelId::Foo);
-        entities.extend([cube]);
+        let cube_asset = assets.get(ModelId::Foo);
+        let entities = vec![Entity::new(
+            ModelId::Foo,
+            Vec3::ZERO,
+            Vec3::splat(0.3),
+            BoundingBox::new(cube_asset),
+        )];
 
+        let ground_asset = assets.get(ModelId::Ground);
+        let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(50.0), ground_asset);
         Self {
             entities,
-            terrain: Terrain::new(assets, Vec3::ZERO, Vec3::splat(50.0), ModelId::Ground),
+            terrain,
             camera,
             light,
         }

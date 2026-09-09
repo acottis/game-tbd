@@ -5,10 +5,11 @@ use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use super::{Material, Mesh};
+use crate::graphics::Vertex;
 use crate::{
-    assets::AssetModel, game::animation::{AnimationChannel, AnimationClip, AnimationValues},
+    assets::AssetModel,
+    game::animation::{AnimationChannel, AnimationClip, AnimationValues},
 };
-use crate::graphics::{Vertex};
 
 fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
     if let Some(info) = info {
@@ -85,11 +86,11 @@ fn load_mesh(document: &Document, buffer: &[Data]) -> Vec<Mesh> {
             let uvs = reader.read_tex_coords(0).unwrap().into_f32();
             if let Some(normals) = reader.read_normals() {
                 for ((vertex, uv), normal) in vertices.zip(uvs).zip(normals) {
-                    vertex_buffer.push(Vertex::new(vertex.into(), normal.into(), uv));
+                    vertex_buffer.push(Vertex::new(vertex.into(), normal.into(), uv.into()));
                 }
             } else {
                 for (vertex, uv) in vertices.zip(uvs) {
-                    vertex_buffer.push(Vertex::new(vertex.into(), Vec3::Y, uv))
+                    vertex_buffer.push(Vertex::new(vertex.into(), Vec3::Y, uv.into()))
                 }
             }
 
@@ -116,7 +117,12 @@ fn load_mesh(document: &Document, buffer: &[Data]) -> Vec<Mesh> {
                 }
                 None => Material::default(),
             };
-            meshes.push(Mesh::new(vertex_buffer, index_buffer, material));
+            meshes.push(Mesh::new(
+                vertex_buffer,
+                index_buffer,
+                material,
+                primitive.bounding_box(),
+            ));
         }
     }
     meshes
@@ -139,12 +145,5 @@ mod tests {
         load("assets/foo.glb");
         load("assets/cube.glb");
         load("assets/ground.glb");
-    }
-
-    #[test]
-    fn foo() {
-        let ground = load("assets/ground.glb");
-        let mesh = ground.meshes.iter().next().unwrap();
-        println!("{}, {}", mesh.indices.len(), mesh.vertices.len());
     }
 }

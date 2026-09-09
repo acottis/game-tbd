@@ -2,20 +2,19 @@ mod gltf;
 
 use std::path::Path;
 
+use ::gltf::mesh::BoundingBox;
 pub use gltf::load;
 use image::DynamicImage;
 
 use crate::{game::animation::AnimationClip, graphics::Vertex};
 
-
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum ModelId {
-    Foo,
-    Cube,
-    Ground,
+    Foo = 0,
+    _Cube = 1,
+    Ground = 2,
 }
-
 
 #[derive(Clone)]
 pub struct Material {
@@ -58,14 +57,21 @@ pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub material: Material,
+    pub bounding_box: BoundingBox,
 }
 
 impl Mesh {
-    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Material) -> Self {
+    pub fn new(
+        vertices: Vec<Vertex>,
+        indices: Vec<u32>,
+        material: Material,
+        bounding_box: BoundingBox,
+    ) -> Self {
         Self {
             vertices,
             indices,
             material,
+            bounding_box,
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 
 use bytemuck::bytes_of;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec2, Vec3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt as _},
     *,
@@ -564,13 +564,13 @@ impl From<&Material> for MaterialUniform {
 pub struct Vertex {
     position: Vec3,
     normal: Vec3,
-    uv: [f32; 2],
+    uv: Vec2,
 }
 impl Vertex {
     const ATTRIBUTES: [VertexAttribute; 3] =
         vertex_attr_array![0 => Float32x3, 1 => Float32x3 ,2 => Float32x2];
 
-    pub fn new(position: Vec3, normal: Vec3, uv: [f32; 2]) -> Self {
+    pub fn new(position: Vec3, normal: Vec3, uv: Vec2) -> Self {
         Self {
             position,
             normal,

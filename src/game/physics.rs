@@ -1,14 +1,46 @@
-use glam::{Mat4, Vec3};
+use glam::{Mat3, Mat4, Vec3};
 
 use crate::assets::AssetModel;
 
 pub const GRAVITY: Vec3 = Vec3::new(0.0, -5.0, 0.0);
 
-pub struct GroundTerrainCollider {
+pub struct BoundingBox {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+impl BoundingBox {
+    pub fn new(model: &AssetModel) -> Self {
+        let mut min = Vec3::splat(f32::INFINITY);
+        let mut max = Vec3::splat(f32::NEG_INFINITY);
+
+        for mesh in &model.meshes {
+            min = min.min(mesh.bounding_box.min.into());
+            max = max.max(mesh.bounding_box.max.into());
+        }
+
+        Self { min, max }
+    }
+
+    pub fn transform(&self, transform: Mat4) -> Self {
+        let center = (self.min + self.max) * 0.5;
+        let extents = (self.max - self.min) * 0.5;
+
+        let center = transform.transform_point3(center);
+        let extents = Mat3::from_mat4(transform).abs() * extents;
+
+        Self {
+            min: center - extents,
+            max: center + extents,
+        }
+    }
+}
+
+pub struct GroundCollision {
     triangles: Vec<[Vec3; 3]>,
 }
 
-impl GroundTerrainCollider {
+impl GroundCollision {
     pub fn new(model: &AssetModel, transform: Mat4) -> Self {
         let mut triangles = Vec::new();
 
