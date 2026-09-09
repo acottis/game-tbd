@@ -127,10 +127,9 @@ impl Entity {
         }
     }
 
+    #[inline(always)]
     pub fn transform(&self) -> Mat4 {
-        Mat4::from_translation(self.position)
-            * Mat4::from_quat(self.rotation)
-            * Mat4::from_scale(self.scale)
+        transform(self.position, self.rotation, self.scale)
     }
 }
 
@@ -155,8 +154,10 @@ impl Terrain {
             collider,
         }
     }
+
+    #[inline(always)]
     pub fn transform(&self) -> Mat4 {
-        Mat4::from_translation(self.position) * Mat4::from_scale(self.scale)
+        transform(self.position, self.rotation, self.scale)
     }
 }
 
