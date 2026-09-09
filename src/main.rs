@@ -1,13 +1,11 @@
-use std::{f32::consts::PI, time::Instant};
+use std::time::Instant;
 
 use game::Game;
-use glam::Vec3;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
     event::{MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::KeyCode,
     window::{Window, WindowId},
 };
 
@@ -15,7 +13,6 @@ mod assets;
 mod game;
 mod graphics;
 
-use game::input::Input;
 use graphics::State;
 
 use crate::assets::AssetModels;
@@ -23,7 +20,6 @@ use crate::assets::AssetModels;
 struct App {
     state: Option<State>,
     game: Game,
-    input: Input,
     assets: AssetModels,
     last_frame_time: Instant,
     delta_time: f32,
@@ -35,8 +31,7 @@ impl App {
         Self {
             state: None,
             game: Game::new(&assets),
-            assets: assets,
-            input: Input::new(),
+            assets,
             last_frame_time: Instant::now(),
             delta_time: 0.0,
         }
@@ -62,55 +57,10 @@ impl App {
     }
 
     fn handle_inputs(&mut self, event_loop: &ActiveEventLoop) {
-        let player = &mut self.game.entities[0];
-        let camera = &mut self.game.camera;
-
-        // Movement is relative to camera direction
-        let mut movement = Vec3::ZERO;
-        if self.input.is_pressed(KeyCode::KeyW) {
-            movement += camera.forward_planar()
+        let should_exit = self.game.handle_inputs(self.delta_time);
+        if should_exit {
+            event_loop.exit()
         }
-        if self.input.is_pressed(KeyCode::KeyS) {
-            movement -= camera.forward_planar()
-        }
-        if self.input.is_pressed(KeyCode::KeyA) {
-            movement -= camera.right()
-        }
-        if self.input.is_pressed(KeyCode::KeyD) {
-            movement += camera.right()
-        }
-        if self.input.is_pressed(KeyCode::Space) {
-            player.jump(5.0);
-        }
-        if self.input.is_pressed(KeyCode::ArrowUp) {
-            camera.move_forward(self.delta_time * 10.0)
-        }
-        if self.input.is_pressed(KeyCode::ArrowLeft) {
-            camera.strafe(self.delta_time * -10.0);
-        }
-        if self.input.is_pressed(KeyCode::ArrowDown) {
-            camera.move_forward(self.delta_time * -10.0)
-        }
-        if self.input.is_pressed(KeyCode::ArrowRight) {
-            camera.strafe(self.delta_time * 10.0);
-        }
-        if self.input.is_pressed(KeyCode::KeyU) {
-            camera.rotate_pitch(self.delta_time * PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::KeyJ) {
-            camera.rotate_pitch(self.delta_time * -PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::KeyH) {
-            camera.rotate_yaw(self.delta_time * -PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::KeyK) {
-            camera.rotate_yaw(self.delta_time * PI / 2.0)
-        }
-        if self.input.is_pressed(KeyCode::Escape) {
-            event_loop.exit();
-        }
-        player.move_direction(self.delta_time * 5.0, movement);
-        camera.follow(player.position());
     }
 }
 
@@ -124,7 +74,7 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         let delta = now.duration_since(self.last_frame_time);
-        // const FPS: u64 = 24;
+        // const FPS: u64 = 60;
         // if delta <= std::time::Duration::from_millis(1000 / FPS) {
         //     return;
         // }
@@ -147,7 +97,7 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { ref event, .. } => {
-                self.input.handle_keyboard(event);
+                self.game.input.handle_keyboard(event);
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(_, direction) => {

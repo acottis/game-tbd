@@ -1,11 +1,15 @@
-use glam::{Mat4, Vec3};
+use std::f32::consts::PI;
+
+use glam::{Mat4, Quat, Vec3};
 
 use physics::GRAVITY;
+use winit::keyboard::KeyCode;
 
 use crate::{
     assets::{AssetModel, AssetModels, ModelId},
     game::{
         camera::Camera,
+        input::Input,
         light::Light,
         physics::{BoundingBox, GroundCollision},
     },
@@ -18,8 +22,8 @@ pub mod light;
 mod physics;
 
 #[inline(always)]
-fn transform(position: Vec3, scale: Vec3) -> Mat4 {
-    Mat4::from_translation(position) * Mat4::from_scale(scale)
+fn transform(position: Vec3, rotation: Quat, scale: Vec3) -> Mat4 {
+    Mat4::from_translation(position) * Mat4::from_quat(rotation) * Mat4::from_scale(scale)
 }
 
 pub struct Animation {
@@ -38,8 +42,9 @@ impl Animation {
 
 pub struct Entity {
     position: Vec3,
-    velocity: Vec3,
+    rotation: Quat,
     scale: Vec3,
+    velocity: Vec3,
     falling: bool,
     bounding_box: BoundingBox,
     pub animation: Option<Animation>,
@@ -50,8 +55,9 @@ impl Entity {
     pub fn new(model: ModelId, position: Vec3, scale: Vec3, bounding_box: BoundingBox) -> Self {
         Self {
             position,
-            velocity: Vec3::ZERO,
+            rotation: Quat::IDENTITY,
             scale,
+            velocity: Vec3::ZERO,
             falling: false,
             animation: None,
             model,
@@ -62,8 +68,15 @@ impl Entity {
         self.position
     }
 
-    pub fn move_direction(&mut self, distance: f32, direction: Vec3) {
+    pub fn move_direction(&mut self, distance: f32, rotation_factor: f32, direction: Vec3) {
         self.position += direction * distance;
+
+        if direction.length_squared() > 0.0 {
+            let angle = direction.x.atan2(direction.z);
+            let target = Quat::from_rotation_y(angle);
+
+            self.rotation = self.rotation.slerp(target, rotation_factor);
+        }
     }
 
     pub const fn jump(&mut self, velocity: f32) {
@@ -115,12 +128,15 @@ impl Entity {
     }
 
     pub fn transform(&self) -> Mat4 {
-        Mat4::from_translation(self.position) * Mat4::from_scale(self.scale)
+        Mat4::from_translation(self.position)
+            * Mat4::from_quat(self.rotation)
+            * Mat4::from_scale(self.scale)
     }
 }
 
 pub struct Terrain {
     position: Vec3,
+    rotation: Quat,
     scale: Vec3,
     collider: GroundCollision,
     pub model: ModelId,
@@ -128,10 +144,12 @@ pub struct Terrain {
 
 impl Terrain {
     pub fn new(model: ModelId, position: Vec3, scale: Vec3, asset: &AssetModel) -> Self {
-        let transform = transform(position, scale);
+        let rotation = Quat::IDENTITY;
+        let transform = transform(position, rotation, scale);
         let collider = GroundCollision::new(asset, transform);
         Self {
             position,
+            rotation,
             scale,
             model,
             collider,
@@ -147,6 +165,7 @@ pub struct Game {
     pub terrain: Terrain,
     pub camera: Camera,
     pub light: Light,
+    pub input: Input,
 }
 
 impl Game {
@@ -172,6 +191,7 @@ impl Game {
             terrain,
             camera,
             light,
+            input: Input::new(),
         }
     }
 
@@ -183,5 +203,59 @@ impl Game {
             entity.apply_velocity(delta_time);
             entity.check_collision(&self.terrain.collider);
         }
+    }
+
+    pub fn handle_inputs(&mut self, delta_time: f32) -> bool {
+        let player = &mut self.entities[0];
+        let camera = &mut self.camera;
+
+        // Movement is relative to camera direction
+        let mut movement = Vec3::ZERO;
+        if self.input.is_pressed(KeyCode::KeyW) {
+            movement += camera.forward_planar()
+        }
+        if self.input.is_pressed(KeyCode::KeyS) {
+            movement -= camera.forward_planar()
+        }
+        if self.input.is_pressed(KeyCode::KeyA) {
+            movement -= camera.right()
+        }
+        if self.input.is_pressed(KeyCode::KeyD) {
+            movement += camera.right()
+        }
+        if self.input.is_pressed(KeyCode::Space) {
+            player.jump(5.0);
+        }
+        if self.input.is_pressed(KeyCode::ArrowUp) {
+            camera.move_forward(delta_time * 10.0)
+        }
+        if self.input.is_pressed(KeyCode::ArrowLeft) {
+            camera.strafe(delta_time * -10.0);
+        }
+        if self.input.is_pressed(KeyCode::ArrowDown) {
+            camera.move_forward(delta_time * -10.0)
+        }
+        if self.input.is_pressed(KeyCode::ArrowRight) {
+            camera.strafe(delta_time * 10.0);
+        }
+        if self.input.is_pressed(KeyCode::KeyU) {
+            camera.rotate_pitch(delta_time * PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyJ) {
+            camera.rotate_pitch(delta_time * -PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyH) {
+            camera.rotate_yaw(delta_time * -PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::KeyK) {
+            camera.rotate_yaw(delta_time * PI / 2.0)
+        }
+        if self.input.is_pressed(KeyCode::Escape) {
+            return true;
+        }
+        let rotation_factor = (10.0 * delta_time).min(1.0);
+        player.move_direction(delta_time * 5.0, rotation_factor, movement);
+        camera.follow(player.position());
+        false
     }
 }
