@@ -24,9 +24,10 @@ pub struct Gpu {
     depth_view: TextureView,
 
     texture_layout: BindGroupLayout,
-    transform_layout: BindGroupLayout,
 
     camera: Transform,
+    model_transforms: ModelTransforms,
+    model_transforms_layout: BindGroupLayout,
 
     light_bind_group: BindGroup,
     light_buffer: Buffer,
@@ -51,10 +52,11 @@ impl Gpu {
         let camera_layout = camera_layout(&device);
         let camera = Transform::new(&device, &camera_layout, Some("camera"));
 
-        let (light_bind_group, light_buffer, light_layout) = load_light(&device);
+        let model_transforms_layout = model_transforms_layout(&device);
+        let model_transforms = ModelTransforms::new(&device, &model_transforms_layout, 100);
 
+        let (light_bind_group, light_buffer, light_layout) = load_light(&device);
         let texture_layout = texture_layout(&device);
-        let transform_layout = transform_layout(&device);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
@@ -62,7 +64,7 @@ impl Gpu {
                 Some(&camera_layout),
                 Some(&light_layout),
                 Some(&texture_layout),
-                Some(&transform_layout),
+                Some(&model_transforms_layout),
             ],
             immediate_size: 0,
         });
@@ -131,10 +133,11 @@ impl Gpu {
             render_pipeline,
             texture_layout,
             depth_view,
-            transform_layout,
             camera,
             light_bind_group,
             light_buffer,
+            model_transforms,
+            model_transforms_layout,
         }
     }
 
@@ -218,46 +221,51 @@ impl Gpu {
                 .write_buffer(&self.light_buffer, 0, bytes_of(&game.light));
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
+            // Transform the models
+            let mut transforms = Vec::with_capacity(game.entities.len() + 1);
             for entity in &game.entities {
-                let model = models.get(entity.model);
-
-                let entity_transform = entity.transform();
-                let entity_transform = match entity.animation {
+                let transform = match entity.animation {
                     Some(ref animation) => {
                         let clip = &asset_models.get(entity.model).animations[0];
                         let (translation, rotation, scale) = clip.sample(animation.current_time);
-                        entity_transform
+                        entity.transform()
                             * Mat4::from_scale_rotation_translation(scale, rotation, translation)
                     }
-                    None => entity_transform,
+                    None => entity.transform(),
                 };
+                transforms.push(transform);
+            }
+            transforms.push(game.terrain.transform());
+            self.model_transforms.write(
+                &self.device,
+                &self.queue,
+                &self.model_transforms_layout,
+                &transforms,
+            );
+            self.queue.write_buffer(
+                &self.model_transforms.buffer,
+                0,
+                bytemuck::cast_slice(&transforms),
+            );
+            render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
-                // Transform the model
-                let gpu_transform = Transform::new(&self.device, &self.transform_layout, None);
-                render_pass.set_bind_group(3, &gpu_transform.bind_group, &[]);
-                self.queue
-                    .write_buffer(&gpu_transform.buffer, 0, bytes_of(&entity_transform));
+            for (i, entity) in game.entities.iter().enumerate() {
+                let model = models.get(entity.model);
 
                 // The model and model textures
                 render_pass.set_bind_group(2, &model.bind_group, &[]);
                 render_pass.set_vertex_buffer(0, model.vertex.slice(..));
                 render_pass.set_index_buffer(model.index.slice(..), IndexFormat::Uint32);
-                render_pass.draw_indexed(0..model.indices_len, 0, 0..1);
+                render_pass.draw_indexed(0..model.indices_len, 0, i as u32..i as u32 + 1);
             }
 
             // TODO: Make terrain a bit more DRY
-            let terrain_transform = game.terrain.transform();
-
-            let gpu_transform = Transform::new(&self.device, &self.transform_layout, None);
-            render_pass.set_bind_group(3, &gpu_transform.bind_group, &[]);
-            self.queue
-                .write_buffer(&gpu_transform.buffer, 0, bytes_of(&terrain_transform));
-
             let model = models.get(game.terrain.model);
             render_pass.set_bind_group(2, &model.bind_group, &[]);
             render_pass.set_vertex_buffer(0, model.vertex.slice(..));
             render_pass.set_index_buffer(model.index.slice(..), IndexFormat::Uint32);
-            render_pass.draw_indexed(0..model.indices_len, 0, 0..1);
+            let terrain_index = game.entities.len() as u32;
+            render_pass.draw_indexed(0..model.indices_len, 0, terrain_index..terrain_index + 1);
         }
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
@@ -266,8 +274,7 @@ impl Gpu {
 }
 
 fn texture_layout(device: &Device) -> BindGroupLayout {
-    let min_binding_size = NonZeroU64::new(size_of::<MaterialUniform>() as u64);
-    let layout_descriptor = BindGroupLayoutDescriptor {
+    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("Texture"),
         entries: &[
             BindGroupLayoutEntry {
@@ -276,7 +283,7 @@ fn texture_layout(device: &Device) -> BindGroupLayout {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size,
+                    min_binding_size: NonZeroU64::new(size_of::<MaterialUniform>() as u64),
                 },
                 count: None,
             },
@@ -297,26 +304,23 @@ fn texture_layout(device: &Device) -> BindGroupLayout {
                 count: None,
             },
         ],
-    };
-    device.create_bind_group_layout(&layout_descriptor)
+    })
 }
 
-fn transform_layout(device: &Device) -> BindGroupLayout {
-    let min_binding_size = NonZeroU64::new(size_of::<Mat4>() as u64);
-    let transform_layout_descriptor = BindGroupLayoutDescriptor {
-        label: Some("Transform"),
+fn model_transforms_layout(device: &Device) -> BindGroupLayout {
+    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some("Model Transforms"),
         entries: &[BindGroupLayoutEntry {
             binding: 0,
             visibility: ShaderStages::VERTEX,
             ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
+                ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,
-                min_binding_size,
+                min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
             },
             count: None,
         }],
-    };
-    device.create_bind_group_layout(&transform_layout_descriptor)
+    })
 }
 
 fn camera_layout(device: &Device) -> BindGroupLayout {
@@ -411,6 +415,51 @@ impl Transform {
         });
 
         Self { buffer, bind_group }
+    }
+}
+
+struct ModelTransforms {
+    buffer: Buffer,
+    bind_group: BindGroup,
+
+    capacity: usize,
+}
+
+impl ModelTransforms {
+    fn new(device: &Device, layout: &BindGroupLayout, capacity: usize) -> Self {
+        let buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Entity Transforms"),
+            size: (capacity * size_of::<Mat4>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Entity Transforms"),
+            layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+        Self {
+            buffer,
+            bind_group,
+            capacity,
+        }
+    }
+
+    fn write(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        layout: &BindGroupLayout,
+        transforms: &[Mat4],
+    ) {
+        // TODO: Think about this
+        if transforms.len() > self.capacity {
+            *self = Self::new(device, layout, transforms.len().next_power_of_two());
+        }
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(transforms));
     }
 }
 

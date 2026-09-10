@@ -38,11 +38,11 @@ var t_diffuse: texture_2d<f32>;
 var s_diffuse: sampler;
 
 @group(3) @binding(0)
-var<uniform> model_transform: mat4x4<f32>;
-
+var<storage, read> model_transforms: array<mat4x4<f32>>;
 
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput, @builtin(instance_index) index: u32) -> VertexOutput {
+    let model_transform = model_transforms[index];
     var out: VertexOutput;
     out.world_position = model_transform * vec4<f32>(in.vertex, 1.0);
     out.position = camera * out.world_position;
