@@ -3,7 +3,6 @@ use std::path::Path;
 use glam::{Mat4, Quat, Vec3};
 use gltf::Node;
 use gltf::animation::util::ReadOutputs;
-use gltf::scene::Transform;
 use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
@@ -75,7 +74,7 @@ fn load_animations(document: &Document, buffer: &[Data]) -> Vec<AnimationClip> {
     animation_clips
 }
 
-fn load_mesh(meshes: &mut Vec<Mesh>, mesh: &gltf::Mesh, transform: Transform, buffer: &[Data]) {
+fn load_mesh(meshes: &mut Vec<Mesh>, mesh: gltf::Mesh, transform: Mat4, buffer: &[Data]) {
     let mut primitives = Vec::new();
     for primitive in mesh.primitives() {
         let mut vertex_buffer = Vec::new();
@@ -109,7 +108,7 @@ fn load_mesh(meshes: &mut Vec<Mesh>, mesh: &gltf::Mesh, transform: Transform, bu
     }
     meshes.push(Mesh {
         primitives,
-        transform: Mat4::from_cols_array_2d(&transform.matrix()),
+        transform,
     })
 }
 
@@ -132,12 +131,13 @@ fn load_materials(document: &Document, buffer: &[Data]) -> Vec<Material> {
     materials
 }
 
-fn load_node(meshes: &mut Vec<Mesh>, node: &Node, buffer: &[Data]) {
-    if let Some(mesh) = &node.mesh() {
-        load_mesh(meshes, mesh, node.transform(), buffer);
+fn load_node(meshes: &mut Vec<Mesh>, parent_transform: &Mat4, node: Node, buffer: &[Data]) {
+    let transform = parent_transform * Mat4::from_cols_array_2d(&node.transform().matrix());
+    if let Some(mesh) = node.mesh() {
+        load_mesh(meshes, mesh, transform, buffer);
     }
     for child in node.children() {
-        load_node(meshes, &child, buffer);
+        load_node(meshes, &transform, child, buffer);
     }
 }
 
@@ -149,7 +149,7 @@ pub fn load(path: impl AsRef<Path>) -> AssetModel {
 
     let mut meshes = Vec::new();
     for node in scenes.nodes() {
-        load_node(&mut meshes, &node, &buffer);
+        load_node(&mut meshes, &Mat4::IDENTITY, node, &buffer);
     }
 
     let animations = load_animations(&document, &buffer);

@@ -198,7 +198,12 @@ impl Gpu {
                     }
                     None => entity.transform(),
                 };
-                self.model_transforms.transforms.push(transform);
+                let model = models.get(entity.model);
+                for meshes in &model.meshes {
+                    self.model_transforms
+                        .transforms
+                        .push(transform * meshes.transform);
+                }
             }
 
             self.model_transforms
@@ -209,14 +214,14 @@ impl Gpu {
                 .write(&self.device, &self.queue, &self.model_transforms_layout);
             render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
-            for (i, entity) in game.entities.iter().enumerate() {
+            let transform_index = &mut 0;
+            for entity in &game.entities {
                 let model = models.get(entity.model);
-                model.draw(&mut render_pass, i as u32);
+                model.draw(&mut render_pass, transform_index);
             }
 
             let model = models.get(game.terrain.model);
-            let terrain_index = game.entities.len() as u32;
-            model.draw(&mut render_pass, terrain_index);
+            model.draw(&mut render_pass, transform_index);
         }
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
@@ -548,9 +553,10 @@ impl Model {
         Self { meshes, materials }
     }
 
-    fn draw(&self, render_pass: &mut RenderPass, transform_index: u32) {
+    fn draw(&self, render_pass: &mut RenderPass, transform_index: &mut u32) {
         for mesh in &self.meshes {
-            mesh.draw(render_pass, &self.materials, transform_index);
+            mesh.draw(render_pass, &self.materials, *transform_index);
+            *transform_index += 1;
         }
     }
 }
