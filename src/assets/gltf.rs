@@ -6,8 +6,7 @@ use gltf::animation::util::ReadOutputs;
 use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
-use super::AssetMaterial;
-use crate::assets::Primitive;
+use crate::assets::{Material, Primitive};
 use crate::graphics::Vertex;
 use crate::{
     assets::AssetModel,
@@ -108,7 +107,7 @@ fn load_mesh(meshes: &mut Vec<Primitive>, mesh: &gltf::Mesh, buffer: &[Data]) {
     }
 }
 
-fn load_materials(document: &Document, buffer: &[Data]) -> Vec<AssetMaterial> {
+fn load_materials(document: &Document, buffer: &[Data]) -> Vec<Material> {
     let mut materials = Vec::new();
     for material in document.materials() {
         let pbr = material.pbr_metallic_roughness();
@@ -117,7 +116,7 @@ fn load_materials(document: &Document, buffer: &[Data]) -> Vec<AssetMaterial> {
         let roughness = pbr.roughness_factor();
         let image = load_texture(pbr.base_color_texture(), &buffer);
 
-        materials.push(AssetMaterial {
+        materials.push(Material {
             base_colour,
             metallic,
             roughness,

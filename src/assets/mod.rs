@@ -15,14 +15,14 @@ pub enum ModelId {
 }
 
 #[derive(Clone, Debug)]
-pub struct AssetMaterial {
+pub struct Material {
     pub base_colour: [f32; 4],
     pub metallic: f32,
     pub roughness: f32,
     pub image: Option<DynamicImage>,
 }
 
-impl Default for AssetMaterial {
+impl Default for Material {
     fn default() -> Self {
         Self {
             base_colour: [1.0, 1.0, 1.0, 1.0],
@@ -37,7 +37,7 @@ impl Default for AssetMaterial {
 pub struct AssetModel {
     pub meshes: Vec<Primitive>,
     pub animations: Vec<AnimationClip>,
-    pub materials: Vec<AssetMaterial>,
+    pub materials: Vec<Material>,
 }
 pub struct AssetModels(pub Vec<AssetModel>);
 

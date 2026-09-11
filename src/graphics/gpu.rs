@@ -9,7 +9,7 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    assets::{self, AssetMaterial, AssetModel, AssetModels, ModelId},
+    assets::{self, AssetModel, AssetModels, ModelId},
     game::{Game, light::Light},
 };
 
@@ -26,7 +26,7 @@ pub struct Gpu {
     material_layout: BindGroupLayout,
 
     camera: Transform,
-    model_transforms: ModelTransforms,
+    model_transforms: Transforms,
     model_transforms_layout: BindGroupLayout,
 
     light_bind_group: BindGroup,
@@ -50,7 +50,7 @@ impl Gpu {
         let camera = Transform::new(&device, &camera_layout, Some("camera"));
 
         let model_transforms_layout = model_transforms_layout(&device);
-        let model_transforms = ModelTransforms::new(&device, &model_transforms_layout, 64);
+        let model_transforms = Transforms::new(&device, &model_transforms_layout, 64);
 
         let (light_bind_group, light_buffer, light_layout) = load_light(&device);
         let material_layout = material_layout(&device);
@@ -177,12 +177,10 @@ impl Gpu {
             render_pass.set_pipeline(&self.render_pipeline);
 
             // Update camera buffer
-            self.queue.write_buffer(
-                &self.camera.buffer,
-                0,
-                bytes_of(&game.camera.view_projection_matrix()),
-            );
+            self.camera
+                .write(&self.queue, &game.camera.view_projection_matrix());
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+
             // Update light buffer
             self.queue
                 .write_buffer(&self.light_buffer, 0, bytes_of(&game.light));
@@ -202,9 +200,11 @@ impl Gpu {
                 };
                 self.model_transforms.transforms.push(transform);
             }
+
             self.model_transforms
                 .transforms
                 .push(game.terrain.transform());
+
             self.model_transforms
                 .write(&self.device, &self.queue, &self.model_transforms_layout);
             render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
@@ -385,25 +385,29 @@ impl Transform {
 
         Self { buffer, bind_group }
     }
+
+    fn write(&mut self, queue: &Queue, transform: &Mat4) {
+        queue.write_buffer(&self.buffer, 0, bytes_of(transform));
+    }
 }
 
-struct ModelTransforms {
+struct Transforms {
     buffer: Buffer,
     bind_group: BindGroup,
     transforms: Vec<Mat4>,
     capacity: usize,
 }
 
-impl ModelTransforms {
+impl Transforms {
     fn new(device: &Device, layout: &BindGroupLayout, capacity: usize) -> Self {
         let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Entity Transforms"),
+            label: None,
             size: (capacity * size_of::<Mat4>()) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Entity Transforms"),
+            label: None,
             layout,
             entries: &[BindGroupEntry {
                 binding: 0,
@@ -442,7 +446,7 @@ impl GpuMaterial {
         device: &Device,
         queue: &Queue,
         layout: &BindGroupLayout,
-        material: &AssetMaterial,
+        material: &assets::Material,
     ) -> Self {
         let sampler = device.create_sampler(&SamplerDescriptor::default());
 
@@ -606,7 +610,7 @@ impl Models {
         Self(models.iter().map(|model| Model::load(gpu, model)).collect())
     }
 
-    pub fn get(&self, id: ModelId) -> &Model {
+    fn get(&self, id: ModelId) -> &Model {
         &self.0[id as usize]
     }
 }
@@ -632,8 +636,8 @@ impl MaterialUniform {
     }
 }
 
-impl From<&AssetMaterial> for MaterialUniform {
-    fn from(m: &AssetMaterial) -> Self {
+impl From<&assets::Material> for MaterialUniform {
+    fn from(m: &assets::Material) -> Self {
         MaterialUniform::new(m.base_colour, m.metallic, m.roughness, m.image.is_some())
     }
 }
