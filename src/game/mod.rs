@@ -196,16 +196,6 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self, delta_time: f32) {
-        for entity in &mut self.entities {
-            entity.animate(delta_time);
-
-            entity.apply_gravity(delta_time);
-            entity.apply_velocity(delta_time);
-            entity.check_collision(&self.terrain.collider);
-        }
-    }
-
     pub fn handle_inputs(&mut self, delta_time: f32) -> bool {
         let player = &mut self.entities[0];
         let camera = &mut self.camera;
@@ -258,5 +248,15 @@ impl Game {
         player.move_direction(delta_time * 5.0, rotation_factor, movement);
         camera.follow(player.position());
         false
+    }
+
+    pub fn update(&mut self, delta_time: f32) {
+        for entity in &mut self.entities {
+            entity.animate(delta_time);
+
+            entity.apply_gravity(delta_time);
+            entity.apply_velocity(delta_time);
+            entity.check_collision(&self.terrain.collider);
+        }
     }
 }

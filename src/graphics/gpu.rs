@@ -1,4 +1,4 @@
-use std::num::NonZeroU64;
+use std::{num::NonZeroU64, sync::Arc};
 
 use bytemuck::bytes_of;
 use glam::{Mat4, Vec2, Vec3};
@@ -6,7 +6,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt as _},
     *,
 };
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     assets::{AssetModel, AssetModels, Material, ModelId},
@@ -23,7 +23,7 @@ pub struct Gpu {
 
     depth_view: TextureView,
 
-    texture_layout: BindGroupLayout,
+    material_layout: BindGroupLayout,
 
     camera: Transform,
     model_transforms: ModelTransforms,
@@ -34,18 +34,15 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    pub fn new(
-        window: impl Into<SurfaceTarget<'static>>,
-        window_width: u32,
-        window_height: u32,
-    ) -> Self {
+    pub fn new(window: Arc<Window>) -> Self {
+        let window_size = window.inner_size();
         let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance.create_surface(window).unwrap();
 
         let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
 
         let surface_config = surface
-            .get_default_config(&adapter, window_width, window_height)
+            .get_default_config(&adapter, window_size.width, window_size.height)
             .unwrap();
         surface.configure(&device, &surface_config);
 
@@ -53,17 +50,17 @@ impl Gpu {
         let camera = Transform::new(&device, &camera_layout, Some("camera"));
 
         let model_transforms_layout = model_transforms_layout(&device);
-        let model_transforms = ModelTransforms::new(&device, &model_transforms_layout, 100);
+        let model_transforms = ModelTransforms::new(&device, &model_transforms_layout, 64);
 
         let (light_bind_group, light_buffer, light_layout) = load_light(&device);
-        let texture_layout = texture_layout(&device);
+        let material_layout = material_layout(&device);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[
                 Some(&camera_layout),
                 Some(&light_layout),
-                Some(&texture_layout),
+                Some(&material_layout),
                 Some(&model_transforms_layout),
             ],
             immediate_size: 0,
@@ -107,21 +104,7 @@ impl Gpu {
             multiview_mask: None,
         });
 
-        let depth_texture = device.create_texture(&TextureDescriptor {
-            label: Some("Depth Texture"),
-            size: Extent3d {
-                width: window_width,
-                height: window_height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Depth32Float,
-            usage: TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-        let depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
+        let depth_view = create_depth_view(&device, window_size);
 
         log::info!("{:#?}", adapter.get_info());
 
@@ -131,7 +114,7 @@ impl Gpu {
             device,
             queue,
             render_pipeline,
-            texture_layout,
+            material_layout,
             depth_view,
             camera,
             light_bind_group,
@@ -141,27 +124,11 @@ impl Gpu {
         }
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.surface_config.height = height;
-        self.surface_config.width = width;
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        self.surface_config.height = size.height;
+        self.surface_config.width = size.width;
         self.surface.configure(&self.device, &self.surface_config);
-
-        let depth_texture = self.device.create_texture(&TextureDescriptor {
-            label: Some("Depth Texture"),
-            size: Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Depth32Float,
-            usage: TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-
-        self.depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
+        self.depth_view = create_depth_view(&self.device, size);
     }
 
     pub fn render(
@@ -222,7 +189,6 @@ impl Gpu {
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
 
             // Transform the models
-            let mut transforms = Vec::with_capacity(game.entities.len() + 1);
             for entity in &game.entities {
                 let transform = match entity.animation {
                     Some(ref animation) => {
@@ -233,20 +199,13 @@ impl Gpu {
                     }
                     None => entity.transform(),
                 };
-                transforms.push(transform);
+                self.model_transforms.transforms.push(transform);
             }
-            transforms.push(game.terrain.transform());
-            self.model_transforms.write(
-                &self.device,
-                &self.queue,
-                &self.model_transforms_layout,
-                &transforms,
-            );
-            self.queue.write_buffer(
-                &self.model_transforms.buffer,
-                0,
-                bytemuck::cast_slice(&transforms),
-            );
+            self.model_transforms
+                .transforms
+                .push(game.terrain.transform());
+            self.model_transforms
+                .write(&self.device, &self.queue, &self.model_transforms_layout);
             render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
             for (i, entity) in game.entities.iter().enumerate() {
@@ -273,7 +232,25 @@ impl Gpu {
     }
 }
 
-fn texture_layout(device: &Device) -> BindGroupLayout {
+fn create_depth_view(device: &Device, size: PhysicalSize<u32>) -> TextureView {
+    let depth_texture = device.create_texture(&TextureDescriptor {
+        label: Some("Depth Texture"),
+        size: Extent3d {
+            width: size.width,
+            height: size.height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: TextureFormat::Depth32Float,
+        usage: TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    depth_texture.create_view(&TextureViewDescriptor::default())
+}
+
+fn material_layout(device: &Device) -> BindGroupLayout {
     device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("Texture"),
         entries: &[
@@ -421,7 +398,7 @@ impl Transform {
 struct ModelTransforms {
     buffer: Buffer,
     bind_group: BindGroup,
-
+    transforms: Vec<Mat4>,
     capacity: usize,
 }
 
@@ -445,21 +422,17 @@ impl ModelTransforms {
             buffer,
             bind_group,
             capacity,
+            transforms: Vec::with_capacity(capacity),
         }
     }
 
-    fn write(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        layout: &BindGroupLayout,
-        transforms: &[Mat4],
-    ) {
+    fn write(&mut self, device: &Device, queue: &Queue, layout: &BindGroupLayout) {
         // TODO: Think about this
-        if transforms.len() > self.capacity {
-            *self = Self::new(device, layout, transforms.len().next_power_of_two());
+        if self.transforms.len() > self.capacity {
+            *self = Self::new(device, layout, self.transforms.len().next_power_of_two());
         }
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(transforms));
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&self.transforms));
+        self.transforms.clear();
     }
 }
 
@@ -476,12 +449,12 @@ impl GpuModel {
         let model = model.meshes.first().unwrap();
 
         let index = gpu.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
+            label: Some("Model Index Buffer"),
             usage: BufferUsages::INDEX,
             contents: bytemuck::cast_slice(&model.indices),
         });
         let vertex = gpu.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
+            label: Some("Model Vertex Buffer"),
             usage: BufferUsages::VERTEX,
             contents: bytemuck::cast_slice(&model.vertices),
         });
@@ -490,7 +463,7 @@ impl GpuModel {
 
         let material_uniform = MaterialUniform::from(&model.material);
         let material_uniform_buffer = gpu.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
+            label: Some("Material Uniform"),
             usage: BufferUsages::UNIFORM,
             contents: bytes_of(&material_uniform),
         });
@@ -544,7 +517,7 @@ impl GpuModel {
 
         let bind_group = gpu.device.create_bind_group(&BindGroupDescriptor {
             label: Some("Texture Bind Group"),
-            layout: &gpu.texture_layout,
+            layout: &gpu.material_layout,
             entries: &[
                 BindGroupEntry {
                     binding: 0,

@@ -49,7 +49,7 @@ impl App {
 
     #[inline(always)]
     fn resize(&mut self, size: PhysicalSize<u32>) {
-        if size.width * size.height != 0 {
+        if size.width == 0 || size.height == 0 {
             let state = unsafe { self.state.as_mut().unwrap_unchecked() };
             state.resize(size);
             self.game.camera.set_aspect_ratio(&size);

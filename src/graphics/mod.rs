@@ -19,9 +19,7 @@ pub struct State {
 impl State {
     pub fn new(window: Window, assets: &AssetModels) -> Self {
         let window = Arc::new(window);
-        let window_size = window.inner_size();
-
-        let gpu = Gpu::new(window.clone(), window_size.width, window_size.height);
+        let gpu = Gpu::new(window.clone());
 
         // TODO: Avoid this clone
         let models = GpuModels::load(&gpu, assets.0.clone());
@@ -35,7 +33,7 @@ impl State {
 
     #[inline(always)]
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        self.gpu.resize(size.width, size.height);
+        self.gpu.resize(size);
     }
 
     #[inline(always)]
