@@ -9,7 +9,7 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    assets::{self, AssetModel, AssetModels, Material, ModelId},
+    assets::{self, AssetMaterial, AssetModel, AssetModels, ModelId},
     game::{Game, light::Light},
 };
 
@@ -433,68 +433,34 @@ impl ModelTransforms {
     }
 }
 
-pub struct Model {
-    meshes: Vec<Mesh>,
-}
-
-impl Model {
-    fn load(gpu: &Gpu, model: &AssetModel) -> Self {
-        Self {
-            meshes: model
-                .meshes
-                .iter()
-                .map(|mesh| Mesh::load(gpu, mesh))
-                .collect(),
-        }
-    }
-
-    fn draw(&self, render_pass: &mut RenderPass, transform_index: u32) {
-        for mesh in &self.meshes {
-            render_pass.set_bind_group(2, &mesh.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, mesh.vertex.slice(..));
-            render_pass.set_index_buffer(mesh.index.slice(..), IndexFormat::Uint32);
-            render_pass.draw_indexed(0..mesh.indices_len, 0, transform_index..transform_index + 1);
-        }
-    }
-}
-
-struct Mesh {
-    vertex: Buffer,
-    index: Buffer,
-    indices_len: u32,
+struct GpuMaterial {
     bind_group: BindGroup,
 }
 
-impl Mesh {
-    fn load(gpu: &Gpu, mesh: &assets::Mesh) -> Self {
-        let index = gpu.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Model Index Buffer"),
-            usage: BufferUsages::INDEX,
-            contents: bytemuck::cast_slice(&mesh.indices),
-        });
-        let vertex = gpu.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("mesh Vertex Buffer"),
-            usage: BufferUsages::VERTEX,
-            contents: bytemuck::cast_slice(&mesh.vertices),
-        });
+impl GpuMaterial {
+    fn new(
+        device: &Device,
+        queue: &Queue,
+        layout: &BindGroupLayout,
+        material: &AssetMaterial,
+    ) -> Self {
+        let sampler = device.create_sampler(&SamplerDescriptor::default());
 
-        let sampler = gpu.device.create_sampler(&SamplerDescriptor::default());
-
-        let material_uniform = MaterialUniform::from(&mesh.material);
-        let material_uniform_buffer = gpu.device.create_buffer_init(&BufferInitDescriptor {
+        let material_uniform = MaterialUniform::from(material);
+        let material_uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Material Uniform"),
             usage: BufferUsages::UNIFORM,
             contents: bytes_of(&material_uniform),
         });
 
-        let texture_view = if let Some(ref image) = mesh.material.image {
+        let texture_view = if let Some(ref image) = material.image {
             let image = image.to_rgba8();
             let size = Extent3d {
                 width: image.width(),
                 height: image.height(),
                 depth_or_array_layers: 1,
             };
-            let texture = gpu.device.create_texture(&TextureDescriptor {
+            let texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size,
                 mip_level_count: 1,
@@ -504,7 +470,7 @@ impl Mesh {
                 usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
-            gpu.queue.write_texture(
+            queue.write_texture(
                 texture.as_image_copy(),
                 &image,
                 TexelCopyBufferLayout {
@@ -517,7 +483,7 @@ impl Mesh {
 
             texture.create_view(&Default::default())
         } else {
-            let texture = gpu.device.create_texture(&TextureDescriptor {
+            let texture = device.create_texture(&TextureDescriptor {
                 label: None,
                 size: Extent3d {
                     width: 1,
@@ -534,9 +500,9 @@ impl Mesh {
             texture.create_view(&Default::default())
         };
 
-        let bind_group = gpu.device.create_bind_group(&BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Texture Bind Group"),
-            layout: &gpu.material_layout,
+            layout,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
@@ -552,11 +518,83 @@ impl Mesh {
                 },
             ],
         });
-        Mesh {
+        Self { bind_group }
+    }
+}
+
+struct Model {
+    primitives: Vec<Primitive>,
+    materials: Vec<GpuMaterial>,
+}
+
+impl Model {
+    fn load(gpu: &Gpu, model: &AssetModel) -> Self {
+        let primitives = model
+            .meshes
+            .iter()
+            .map(|mesh| Primitive::load(&gpu.device, mesh))
+            .collect();
+        let materials = model
+            .materials
+            .iter()
+            .map(|material| {
+                GpuMaterial::new(&gpu.device, &gpu.queue, &gpu.material_layout, material)
+            })
+            .collect();
+        Self {
+            primitives,
+            materials,
+        }
+    }
+
+    fn draw(&self, render_pass: &mut RenderPass, transform_index: u32) {
+        let mut last_material_index = None;
+
+        for primitive in &self.primitives {
+            // Don't load material if its already loaded
+            if primitive.material_index != last_material_index {
+                if let Some(index) = primitive.material_index {
+                    render_pass.set_bind_group(2, &self.materials[index].bind_group, &[]);
+
+                    last_material_index = primitive.material_index;
+                }
+            }
+            render_pass.set_vertex_buffer(0, primitive.vertex.slice(..));
+            render_pass.set_index_buffer(primitive.index.slice(..), IndexFormat::Uint32);
+            render_pass.draw_indexed(
+                0..primitive.indices_len,
+                0,
+                transform_index..transform_index + 1,
+            );
+        }
+    }
+}
+
+struct Primitive {
+    vertex: Buffer,
+    index: Buffer,
+    indices_len: u32,
+    material_index: Option<usize>,
+}
+
+impl Primitive {
+    fn load(device: &Device, mesh: &assets::Primitive) -> Self {
+        let index = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Model Index Buffer"),
+            usage: BufferUsages::INDEX,
+            contents: bytemuck::cast_slice(&mesh.indices),
+        });
+        let vertex = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Mesh Vertex Buffer"),
+            usage: BufferUsages::VERTEX,
+            contents: bytemuck::cast_slice(&mesh.vertices),
+        });
+
+        Self {
             vertex,
             index,
             indices_len: mesh.indices.len() as u32,
-            bind_group,
+            material_index: mesh.material,
         }
     }
 }
@@ -594,8 +632,8 @@ impl MaterialUniform {
     }
 }
 
-impl From<&Material> for MaterialUniform {
-    fn from(m: &Material) -> Self {
+impl From<&AssetMaterial> for MaterialUniform {
+    fn from(m: &AssetMaterial) -> Self {
         MaterialUniform::new(m.base_colour, m.metallic, m.roughness, m.image.is_some())
     }
 }

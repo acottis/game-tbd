@@ -3,6 +3,7 @@ use gltf::animation::{Interpolation, Property};
 
 #[derive(Debug, Clone)]
 pub struct AnimationChannel {
+    pub node: usize,
     pub property: Property,
     pub interpolation: Interpolation,
     pub times: Vec<f32>,
