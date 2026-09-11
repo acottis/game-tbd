@@ -8,6 +8,7 @@ use winit::keyboard::KeyCode;
 use crate::{
     assets::{AssetModel, AssetModels, ModelId},
     game::{
+        animation::AnimationId,
         camera::Camera,
         input::Input,
         light::Light,
@@ -27,15 +28,18 @@ fn transform(position: Vec3, rotation: Quat, scale: Vec3) -> Mat4 {
 }
 
 pub struct Animation {
+    pub id: AnimationId,
     pub current_time: f32,
-    duration: f32,
+    /// None means the animation will loop forever
+    duration: Option<f32>,
 }
 
 impl Animation {
-    pub const fn new(duration: f32) -> Self {
+    pub const fn new(id: AnimationId, duration: Option<f32>) -> Self {
         Self {
             current_time: 0.0,
             duration,
+            id,
         }
     }
 }
@@ -86,8 +90,7 @@ impl Entity {
 
         self.velocity.y = velocity;
         self.falling = true;
-        // TODO: Hacked in infinite jump animation
-        self.animation = Some(Animation::new(1000.0));
+        self.animation = Some(Animation::new(AnimationId::Jump, None));
     }
 
     fn bounds(&self) -> BoundingBox {
@@ -118,10 +121,14 @@ impl Entity {
     }
 
     const fn animate(&mut self, delta_time: f32) {
-        if let Some(animation) = &mut self.animation {
-            animation.current_time += delta_time;
+        let Some(animation) = &mut self.animation else {
+            return;
+        };
 
-            if animation.current_time >= animation.duration {
+        animation.current_time += delta_time;
+
+        if let Some(duration) = animation.duration {
+            if animation.current_time >= duration {
                 self.animation = None
             }
         }

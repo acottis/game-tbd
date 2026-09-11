@@ -5,7 +5,10 @@ use glam::Mat4;
 pub use gltf::load;
 use image::DynamicImage;
 
-use crate::{game::animation::AnimationClip, graphics::Vertex};
+use crate::{
+    game::animation::{AnimationClip, AnimationSet},
+    graphics::Vertex,
+};
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
@@ -35,7 +38,7 @@ impl Default for Material {
 
 pub struct AssetModel {
     pub meshes: Vec<Mesh>,
-    pub animations: Vec<AnimationClip>,
+    pub animations: AnimationSet,
     pub materials: Vec<Material>,
 }
 pub struct AssetModels(pub Vec<AssetModel>);

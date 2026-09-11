@@ -7,6 +7,7 @@ use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use crate::assets::{Material, Mesh, Primitive};
+use crate::game::animation::{AnimationId, AnimationSet};
 use crate::graphics::Vertex;
 use crate::{
     assets::AssetModel,
@@ -35,11 +36,18 @@ fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
     }
 }
 
-fn load_animations(document: &Document, buffer: &[Data]) -> Vec<AnimationClip> {
-    let mut animation_clips = Vec::new();
+fn load_animations(document: &Document, buffer: &[Data]) -> AnimationSet {
+    let mut animation_set = AnimationSet::new();
+
     for animation in document.animations() {
         let mut channels = Vec::new();
         let mut duration: f32 = 0.0;
+
+        let Some(name) = animation.name() else {
+            panic!("Animation with no name!")
+        };
+
+        let id = AnimationId::try_from(name).unwrap();
 
         for channel in animation.channels() {
             let reader = channel.reader(|c| Some(&buffer[c.index()]));
@@ -69,9 +77,9 @@ fn load_animations(document: &Document, buffer: &[Data]) -> Vec<AnimationClip> {
                 values,
             });
         }
-        animation_clips.push(AnimationClip { channels, duration });
+        animation_set.insert(id, AnimationClip { channels, duration });
     }
-    animation_clips
+    animation_set
 }
 
 fn load_mesh(meshes: &mut Vec<Mesh>, mesh: gltf::Mesh, transform: Mat4, buffer: &[Data]) {

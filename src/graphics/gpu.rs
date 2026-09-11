@@ -178,11 +178,16 @@ impl Gpu {
         for entity in &game.entities {
             let transform = match entity.animation {
                 Some(ref animation) => {
-                    // TODO: This is hard coded bad
-                    let clip = &asset_models.get(entity.model).animations[0];
-                    let (translation, rotation, scale) = clip.sample(animation.current_time);
-                    entity.transform()
-                        * Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                    let model = asset_models.get(entity.model);
+                    if let Some(clip) = model.animations.get(animation.id) {
+                        let (translation, rotation, scale) = clip.sample(animation.current_time);
+
+                        entity.transform()
+                            * Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                    } else {
+                        log::warn!("Clip missing for animation!");
+                        entity.transform()
+                    }
                 }
                 None => entity.transform(),
             };
