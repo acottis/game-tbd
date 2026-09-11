@@ -1,7 +1,5 @@
 mod gltf;
 
-use std::path::Path;
-
 use ::gltf::mesh::BoundingBox;
 pub use gltf::load;
 use image::DynamicImage;
@@ -14,9 +12,10 @@ pub enum ModelId {
     Foo = 0,
     _Cube = 1,
     Ground = 2,
+    Foo2 = 3,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Material {
     pub base_colour: [f32; 4],
     pub metallic: f32,
@@ -40,11 +39,17 @@ pub struct AssetModel {
     pub meshes: Vec<Mesh>,
     pub animations: Vec<AnimationClip>,
 }
-pub struct AssetModels(pub [AssetModel; 3]);
+pub struct AssetModels(pub Vec<AssetModel>);
 
 impl AssetModels {
-    pub fn load(paths: [impl AsRef<Path>; 3]) -> Self {
-        Self(paths.map(|path| load(path)))
+    pub fn load() -> Self {
+        let paths = [
+            "assets/foo.glb",
+            "assets/cube.glb",
+            "assets/ground.glb",
+            "assets/foo2.glb",
+        ];
+        Self(paths.into_iter().map(|path| load(path)).collect())
     }
 
     pub fn get(&self, id: ModelId) -> &AssetModel {
@@ -52,7 +57,7 @@ impl AssetModels {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,

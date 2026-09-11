@@ -9,7 +9,7 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    assets::{AssetModel, AssetModels, Material, ModelId},
+    assets::{self, AssetModel, AssetModels, Material, ModelId},
     game::{Game, light::Light},
 };
 
@@ -87,7 +87,7 @@ impl Gpu {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: Some(Face::Back),
+                cull_mode: None,
                 unclipped_depth: false,
                 polygon_mode: PolygonMode::Fill,
                 conservative: false,
@@ -135,7 +135,7 @@ impl Gpu {
         &mut self,
         window: &Window,
         game: &Game,
-        models: &GpuModels,
+        models: &Models,
         asset_models: &AssetModels,
     ) {
         let frame = match self.surface.get_current_texture() {
@@ -192,6 +192,7 @@ impl Gpu {
             for entity in &game.entities {
                 let transform = match entity.animation {
                     Some(ref animation) => {
+                        // TODO: This is hard coded bad
                         let clip = &asset_models.get(entity.model).animations[0];
                         let (translation, rotation, scale) = clip.sample(animation.current_time);
                         entity.transform()
@@ -210,21 +211,12 @@ impl Gpu {
 
             for (i, entity) in game.entities.iter().enumerate() {
                 let model = models.get(entity.model);
-
-                // The model and model textures
-                render_pass.set_bind_group(2, &model.bind_group, &[]);
-                render_pass.set_vertex_buffer(0, model.vertex.slice(..));
-                render_pass.set_index_buffer(model.index.slice(..), IndexFormat::Uint32);
-                render_pass.draw_indexed(0..model.indices_len, 0, i as u32..i as u32 + 1);
+                model.draw(&mut render_pass, i as u32);
             }
 
-            // TODO: Make terrain a bit more DRY
             let model = models.get(game.terrain.model);
-            render_pass.set_bind_group(2, &model.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, model.vertex.slice(..));
-            render_pass.set_index_buffer(model.index.slice(..), IndexFormat::Uint32);
             let terrain_index = game.entities.len() as u32;
-            render_pass.draw_indexed(0..model.indices_len, 0, terrain_index..terrain_index + 1);
+            model.draw(&mut render_pass, terrain_index);
         }
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
@@ -429,46 +421,73 @@ impl ModelTransforms {
     fn write(&mut self, device: &Device, queue: &Queue, layout: &BindGroupLayout) {
         // TODO: Think about this
         if self.transforms.len() > self.capacity {
-            *self = Self::new(device, layout, self.transforms.len().next_power_of_two());
+            let transforms = std::mem::take(&mut self.transforms);
+            let capacity = transforms.len().next_power_of_two();
+
+            let mut new = Self::new(device, layout, capacity);
+            new.transforms = transforms;
+            *self = new;
         }
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&self.transforms));
         self.transforms.clear();
     }
 }
 
-pub struct GpuModel {
+pub struct Model {
+    meshes: Vec<Mesh>,
+}
+
+impl Model {
+    fn load(gpu: &Gpu, model: &AssetModel) -> Self {
+        Self {
+            meshes: model
+                .meshes
+                .iter()
+                .map(|mesh| Mesh::load(gpu, mesh))
+                .collect(),
+        }
+    }
+
+    fn draw(&self, render_pass: &mut RenderPass, transform_index: u32) {
+        for mesh in &self.meshes {
+            render_pass.set_bind_group(2, &mesh.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, mesh.vertex.slice(..));
+            render_pass.set_index_buffer(mesh.index.slice(..), IndexFormat::Uint32);
+            render_pass.draw_indexed(0..mesh.indices_len, 0, transform_index..transform_index + 1);
+        }
+    }
+}
+
+struct Mesh {
     vertex: Buffer,
     index: Buffer,
     indices_len: u32,
     bind_group: BindGroup,
 }
 
-impl GpuModel {
-    pub fn load(gpu: &Gpu, model: &AssetModel) -> Self {
-        // TODO: Handle more than one mesh
-        let model = model.meshes.first().unwrap();
-
+impl Mesh {
+    fn load(gpu: &Gpu, mesh: &assets::Mesh) -> Self {
         let index = gpu.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Model Index Buffer"),
             usage: BufferUsages::INDEX,
-            contents: bytemuck::cast_slice(&model.indices),
+            contents: bytemuck::cast_slice(&mesh.indices),
         });
         let vertex = gpu.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Model Vertex Buffer"),
+            label: Some("mesh Vertex Buffer"),
             usage: BufferUsages::VERTEX,
-            contents: bytemuck::cast_slice(&model.vertices),
+            contents: bytemuck::cast_slice(&mesh.vertices),
         });
 
         let sampler = gpu.device.create_sampler(&SamplerDescriptor::default());
 
-        let material_uniform = MaterialUniform::from(&model.material);
+        let material_uniform = MaterialUniform::from(&mesh.material);
         let material_uniform_buffer = gpu.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Material Uniform"),
             usage: BufferUsages::UNIFORM,
             contents: bytes_of(&material_uniform),
         });
 
-        let texture_view = if let Some(ref image) = model.material.image {
+        let texture_view = if let Some(ref image) = mesh.material.image {
             let image = image.to_rgba8();
             let size = Extent3d {
                 width: image.width(),
@@ -533,23 +552,23 @@ impl GpuModel {
                 },
             ],
         });
-        GpuModel {
+        Mesh {
             vertex,
             index,
-            indices_len: model.indices.len() as u32,
+            indices_len: mesh.indices.len() as u32,
             bind_group,
         }
     }
 }
 
-pub struct GpuModels([GpuModel; 3]);
+pub struct Models(Vec<Model>);
 
-impl GpuModels {
-    pub fn load(gpu: &Gpu, asset_models: [AssetModel; 3]) -> Self {
-        Self(asset_models.map(|model| GpuModel::load(gpu, &model)))
+impl Models {
+    pub fn load(gpu: &Gpu, models: &[AssetModel]) -> Self {
+        Self(models.iter().map(|model| Model::load(gpu, model)).collect())
     }
 
-    pub fn get(&self, id: ModelId) -> &GpuModel {
+    pub fn get(&self, id: ModelId) -> &Model {
         &self.0[id as usize]
     }
 }

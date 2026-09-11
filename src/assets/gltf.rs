@@ -143,6 +143,7 @@ mod tests {
     #[test]
     fn load_assets() {
         load("assets/foo.glb");
+        load("assets/foo2.glb");
         load("assets/cube.glb");
         load("assets/ground.glb");
     }

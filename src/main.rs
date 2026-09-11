@@ -27,7 +27,7 @@ struct App {
 
 impl App {
     fn new() -> Self {
-        let assets = AssetModels::load(["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"]);
+        let assets = AssetModels::load();
         Self {
             state: None,
             game: Game::new(&assets),
@@ -38,7 +38,7 @@ impl App {
     }
 
     fn init(&mut self, window: Window) {
-        self.state = Some(State::new(window, &self.assets));
+        self.state = Some(State::new(window, &self.assets.0));
     }
 
     #[inline(always)]
