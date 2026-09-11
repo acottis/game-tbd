@@ -15,8 +15,10 @@ impl BoundingBox {
         let mut max = Vec3::splat(f32::NEG_INFINITY);
 
         for mesh in &model.meshes {
-            min = min.min(mesh.bounding_box.min.into());
-            max = max.max(mesh.bounding_box.max.into());
+            for primitive in &mesh.primitives {
+                min = min.min(primitive.bounding_box.min.into());
+                max = max.max(primitive.bounding_box.max.into());
+            }
         }
 
         Self { min, max }
@@ -45,16 +47,21 @@ impl GroundCollision {
         let mut triangles = Vec::new();
 
         for mesh in &model.meshes {
-            for indices in mesh.indices.chunks_exact(3) {
-                let a = transform.transform_point3(mesh.vertices[indices[0] as usize].position());
-                let b = transform.transform_point3(mesh.vertices[indices[1] as usize].position());
-                let c = transform.transform_point3(mesh.vertices[indices[2] as usize].position());
-                let normal = (b - a).cross(c - a).normalize();
+            for primitive in &mesh.primitives {
+                for indices in primitive.indices.chunks_exact(3) {
+                    let a = transform
+                        .transform_point3(primitive.vertices[indices[0] as usize].position());
+                    let b = transform
+                        .transform_point3(primitive.vertices[indices[1] as usize].position());
+                    let c = transform
+                        .transform_point3(primitive.vertices[indices[2] as usize].position());
+                    let normal = (b - a).cross(c - a).normalize();
 
-                // We only care about walkable collision so we discard
-                // negative y
-                if normal.y > 0.0 {
-                    triangles.push([a, b, c]);
+                    // We only care about walkable collision so we discard
+                    // negative y
+                    if normal.y > 0.0 {
+                        triangles.push([a, b, c]);
+                    }
                 }
             }
         }

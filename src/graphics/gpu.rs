@@ -527,16 +527,16 @@ impl GpuMaterial {
 }
 
 struct Model {
-    primitives: Vec<Primitive>,
+    meshes: Vec<Mesh>,
     materials: Vec<GpuMaterial>,
 }
 
 impl Model {
     fn load(gpu: &Gpu, model: &AssetModel) -> Self {
-        let primitives = model
+        let meshes = model
             .meshes
             .iter()
-            .map(|mesh| Primitive::load(&gpu.device, mesh))
+            .map(|mesh| Mesh::load(&gpu.device, mesh))
             .collect();
         let materials = model
             .materials
@@ -545,20 +545,48 @@ impl Model {
                 GpuMaterial::new(&gpu.device, &gpu.queue, &gpu.material_layout, material)
             })
             .collect();
-        Self {
-            primitives,
-            materials,
-        }
+        Self { meshes, materials }
     }
 
     fn draw(&self, render_pass: &mut RenderPass, transform_index: u32) {
+        for mesh in &self.meshes {
+            mesh.draw(render_pass, &self.materials, transform_index);
+        }
+    }
+}
+
+struct Mesh {
+    primitives: Vec<Primitive>,
+    transform: Mat4,
+}
+
+impl Mesh {
+    fn load(device: &Device, mesh: &assets::Mesh) -> Self {
+        let primitives = mesh
+            .primitives
+            .iter()
+            .map(|primitive| Primitive::load(device, primitive))
+            .collect();
+
+        Self {
+            primitives,
+            transform: mesh.transform,
+        }
+    }
+
+    fn draw(
+        &self,
+        render_pass: &mut RenderPass<'_>,
+        materials: &[GpuMaterial],
+        transform_index: u32,
+    ) {
         let mut last_material_index = None;
 
         for primitive in &self.primitives {
             // Don't load material if its already loaded
             if primitive.material_index != last_material_index {
                 if let Some(index) = primitive.material_index {
-                    render_pass.set_bind_group(2, &self.materials[index].bind_group, &[]);
+                    render_pass.set_bind_group(2, &materials[index].bind_group, &[]);
 
                     last_material_index = primitive.material_index;
                 }
@@ -582,23 +610,23 @@ struct Primitive {
 }
 
 impl Primitive {
-    fn load(device: &Device, mesh: &assets::Primitive) -> Self {
+    fn load(device: &Device, primitive: &assets::Primitive) -> Self {
         let index = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Model Index Buffer"),
             usage: BufferUsages::INDEX,
-            contents: bytemuck::cast_slice(&mesh.indices),
+            contents: bytemuck::cast_slice(&primitive.indices),
         });
         let vertex = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Mesh Vertex Buffer"),
             usage: BufferUsages::VERTEX,
-            contents: bytemuck::cast_slice(&mesh.vertices),
+            contents: bytemuck::cast_slice(&primitive.vertices),
         });
 
         Self {
             vertex,
             index,
-            indices_len: mesh.indices.len() as u32,
-            material_index: mesh.material,
+            indices_len: primitive.indices.len() as u32,
+            material_index: primitive.material,
         }
     }
 }

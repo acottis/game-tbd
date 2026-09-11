@@ -1,12 +1,13 @@
 use std::path::Path;
 
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use gltf::Node;
 use gltf::animation::util::ReadOutputs;
+use gltf::scene::Transform;
 use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
-use crate::assets::{Material, Primitive};
+use crate::assets::{Material, Mesh, Primitive};
 use crate::graphics::Vertex;
 use crate::{
     assets::AssetModel,
@@ -74,7 +75,8 @@ fn load_animations(document: &Document, buffer: &[Data]) -> Vec<AnimationClip> {
     animation_clips
 }
 
-fn load_mesh(meshes: &mut Vec<Primitive>, mesh: &gltf::Mesh, buffer: &[Data]) {
+fn load_mesh(meshes: &mut Vec<Mesh>, mesh: &gltf::Mesh, transform: Transform, buffer: &[Data]) {
+    let mut primitives = Vec::new();
     for primitive in mesh.primitives() {
         let mut vertex_buffer = Vec::new();
         let mut index_buffer = Vec::new();
@@ -98,13 +100,17 @@ fn load_mesh(meshes: &mut Vec<Primitive>, mesh: &gltf::Mesh, buffer: &[Data]) {
             index_buffer.push(index);
         }
 
-        meshes.push(Primitive::new(
+        primitives.push(Primitive::new(
             vertex_buffer,
             index_buffer,
             primitive.bounding_box(),
             primitive.material().index(),
         ));
     }
+    meshes.push(Mesh {
+        primitives,
+        transform: Mat4::from_cols_array_2d(&transform.matrix()),
+    })
 }
 
 fn load_materials(document: &Document, buffer: &[Data]) -> Vec<Material> {
@@ -126,9 +132,9 @@ fn load_materials(document: &Document, buffer: &[Data]) -> Vec<Material> {
     materials
 }
 
-fn load_node(meshes: &mut Vec<Primitive>, node: &Node, buffer: &[Data]) {
+fn load_node(meshes: &mut Vec<Mesh>, node: &Node, buffer: &[Data]) {
     if let Some(mesh) = &node.mesh() {
-        load_mesh(meshes, mesh, buffer);
+        load_mesh(meshes, mesh, node.transform(), buffer);
     }
     for child in node.children() {
         load_node(meshes, &child, buffer);
@@ -163,7 +169,7 @@ mod tests {
     #[test]
     fn load_assets() {
         load("assets/foo.glb");
-        // load("assets/cube.glb");
-        // load("assets/ground.glb");
+        load("assets/cube.glb");
+        load("assets/ground.glb");
     }
 }

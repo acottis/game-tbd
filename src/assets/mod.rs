@@ -1,6 +1,7 @@
 mod gltf;
 
 use ::gltf::mesh::BoundingBox;
+use glam::Mat4;
 pub use gltf::load;
 use image::DynamicImage;
 
@@ -14,7 +15,6 @@ pub enum ModelId {
     Ground = 2,
 }
 
-#[derive(Clone, Debug)]
 pub struct Material {
     pub base_colour: [f32; 4],
     pub metallic: f32,
@@ -33,9 +33,8 @@ impl Default for Material {
     }
 }
 
-#[derive(Clone)]
 pub struct AssetModel {
-    pub meshes: Vec<Primitive>,
+    pub meshes: Vec<Mesh>,
     pub animations: Vec<AnimationClip>,
     pub materials: Vec<Material>,
 }
@@ -50,6 +49,11 @@ impl AssetModels {
     pub fn get(&self, id: ModelId) -> &AssetModel {
         &self.0[id as usize]
     }
+}
+
+pub struct Mesh {
+    pub primitives: Vec<Primitive>,
+    pub transform: Mat4,
 }
 
 #[derive(Clone, Debug)]
