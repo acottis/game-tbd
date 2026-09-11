@@ -169,59 +169,55 @@ impl Gpu {
             multiview_mask: None,
         };
 
+        self.camera
+            .write(&self.queue, &game.camera.view_projection_matrix());
+        self.queue
+            .write_buffer(&self.light_buffer, 0, bytes_of(&game.light));
+
+        // Transform the models
+        for entity in &game.entities {
+            let transform = match entity.animation {
+                Some(ref animation) => {
+                    // TODO: This is hard coded bad
+                    let clip = &asset_models.get(entity.model).animations[0];
+                    let (translation, rotation, scale) = clip.sample(animation.current_time);
+                    entity.transform()
+                        * Mat4::from_scale_rotation_translation(scale, rotation, translation)
+                }
+                None => entity.transform(),
+            };
+            let model = models.get(entity.model);
+            for meshes in &model.meshes {
+                self.model_transforms
+                    .transforms
+                    .push(transform * meshes.transform);
+            }
+        }
+        self.model_transforms
+            .transforms
+            .push(game.terrain.transform());
+        self.model_transforms
+            .write(&self.device, &self.queue, &self.model_transforms_layout);
+
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
         // GPU work goes here
         {
             let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
             render_pass.set_pipeline(&self.render_pipeline);
-
-            // Update camera buffer
-            self.camera
-                .write(&self.queue, &game.camera.view_projection_matrix());
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
-
-            // Update light buffer
-            self.queue
-                .write_buffer(&self.light_buffer, 0, bytes_of(&game.light));
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
-
-            // Transform the models
-            for entity in &game.entities {
-                let transform = match entity.animation {
-                    Some(ref animation) => {
-                        // TODO: This is hard coded bad
-                        let clip = &asset_models.get(entity.model).animations[0];
-                        let (translation, rotation, scale) = clip.sample(animation.current_time);
-                        entity.transform()
-                            * Mat4::from_scale_rotation_translation(scale, rotation, translation)
-                    }
-                    None => entity.transform(),
-                };
-                let model = models.get(entity.model);
-                for meshes in &model.meshes {
-                    self.model_transforms
-                        .transforms
-                        .push(transform * meshes.transform);
-                }
-            }
-
-            self.model_transforms
-                .transforms
-                .push(game.terrain.transform());
-
-            self.model_transforms
-                .write(&self.device, &self.queue, &self.model_transforms_layout);
             render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
             let transform_index = &mut 0;
             for entity in &game.entities {
-                let model = models.get(entity.model);
-                model.draw(&mut render_pass, transform_index);
+                models
+                    .get(entity.model)
+                    .draw(&mut render_pass, transform_index);
             }
-
-            let model = models.get(game.terrain.model);
-            model.draw(&mut render_pass, transform_index);
+            models
+                .get(game.terrain.model)
+                .draw(&mut render_pass, transform_index);
         }
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
