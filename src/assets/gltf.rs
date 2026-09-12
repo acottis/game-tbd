@@ -58,7 +58,7 @@ fn load_animations(document: &Document, buffer: &[Data]) -> AnimationSet {
 
             let values = match reader.read_outputs().unwrap() {
                 ReadOutputs::Translations(values) => {
-                    AnimationValues::Translation(values.map(Vec3::from_array).collect())
+                    AnimationValues::Translation(values.map(Vec3::from).collect())
                 }
                 ReadOutputs::Rotations(values) => {
                     AnimationValues::Rotation(values.into_f32().map(Quat::from_array).collect())
@@ -70,8 +70,6 @@ fn load_animations(document: &Document, buffer: &[Data]) -> AnimationSet {
             };
 
             channels.push(AnimationChannel {
-                node: channel.target().node().index(),
-                property: channel.target().property(),
                 interpolation: channel.sampler().interpolation(),
                 times,
                 values,

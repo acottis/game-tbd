@@ -182,7 +182,7 @@ impl Game {
             width: 800,
             height: 600,
         });
-        let light = Light::new(Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), 0.9);
+        let light = Light::new(Vec3::new(100.0, 20.0, 20.0), Vec3::new(1.0, 1.0, 1.0), 0.9);
 
         let cube = ModelId::Foo;
         let cube_asset = assets.get(cube);

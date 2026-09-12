@@ -1,5 +1,5 @@
 use glam::{Quat, Vec3};
-use gltf::animation::{Interpolation, Property};
+use gltf::animation::Interpolation;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(usize)]
@@ -36,8 +36,6 @@ impl AnimationSet {
 
 #[derive(Debug, Clone)]
 pub struct AnimationChannel {
-    pub node: usize,
-    pub property: Property,
     pub interpolation: Interpolation,
     pub times: Vec<f32>,
     pub values: AnimationValues,
@@ -77,14 +75,30 @@ fn keyframes(times: &[f32], time: f32) -> (usize, usize, f32) {
     (last, last, 0.0)
 }
 
-fn sample_vec3(times: &[f32], values: &[Vec3], time: f32) -> Vec3 {
+fn sample_vec3(interpolation: Interpolation, times: &[f32], values: &[Vec3], time: f32) -> Vec3 {
     let (i0, i1, t) = keyframes(times, time);
-    values[i0].lerp(values[i1], t)
+    match interpolation {
+        Interpolation::Step => values[i0],
+
+        Interpolation::Linear => values[i0].lerp(values[i1], t),
+
+        Interpolation::CubicSpline => {
+            todo!("Cubic spline")
+        }
+    }
 }
 
-fn sample_quat(times: &[f32], values: &[Quat], time: f32) -> Quat {
+fn sample_quat(interpolation: Interpolation, times: &[f32], values: &[Quat], time: f32) -> Quat {
     let (i0, i1, t) = keyframes(times, time);
-    values[i0].slerp(values[i1], t)
+    match interpolation {
+        Interpolation::Step => values[i0],
+
+        Interpolation::Linear => values[i0].slerp(values[i1], t),
+
+        Interpolation::CubicSpline => {
+            todo!("Cubic spline")
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -105,15 +119,15 @@ impl AnimationClip {
         for channel in &self.channels {
             match &channel.values {
                 AnimationValues::Translation(values) => {
-                    translation = sample_vec3(&channel.times, values, time);
+                    translation = sample_vec3(channel.interpolation, &channel.times, values, time);
                 }
 
                 AnimationValues::Rotation(values) => {
-                    rotation = sample_quat(&channel.times, values, time);
+                    rotation = sample_quat(channel.interpolation, &channel.times, values, time);
                 }
 
                 AnimationValues::Scale(values) => {
-                    scale = sample_vec3(&channel.times, values, time);
+                    scale = sample_vec3(channel.interpolation, &channel.times, values, time);
                 }
             }
         }
