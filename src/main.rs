@@ -15,19 +15,19 @@ mod graphics;
 
 use graphics::State;
 
-use crate::assets::AssetModels;
+use crate::assets::AssetModelSet;
 
 struct App {
     state: Option<State>,
     game: Game,
-    assets: AssetModels,
+    assets: AssetModelSet,
     last_frame_time: Instant,
     delta_time: f32,
 }
 
 impl App {
     fn new() -> Self {
-        let assets = AssetModels::load();
+        let assets = AssetModelSet::load();
         Self {
             state: None,
             game: Game::new(&assets),

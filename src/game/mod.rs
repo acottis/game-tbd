@@ -6,7 +6,7 @@ use physics::GRAVITY;
 use winit::keyboard::KeyCode;
 
 use crate::{
-    assets::{AssetModel, AssetModels, ModelId},
+    assets::{AssetModel, AssetModelSet, ModelId},
     game::{
         animation::AnimationId,
         camera::Camera,
@@ -177,7 +177,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(assets: &AssetModels) -> Self {
+    pub fn new(assets: &AssetModelSet) -> Self {
         let camera = Camera::new(&winit::dpi::PhysicalSize {
             width: 800,
             height: 600,

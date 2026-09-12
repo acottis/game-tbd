@@ -38,9 +38,9 @@ pub struct AssetModel {
     pub animations: AnimationSet,
     pub materials: Vec<Material>,
 }
-pub struct AssetModels(pub Vec<AssetModel>);
+pub struct AssetModelSet(pub Vec<AssetModel>);
 
-impl AssetModels {
+impl AssetModelSet {
     pub fn load() -> Self {
         let paths = ["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"];
         Self(paths.into_iter().map(|path| load(path)).collect())

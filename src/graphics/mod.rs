@@ -3,9 +3,9 @@ use std::sync::Arc;
 use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::assets::{AssetModel, AssetModels};
+use crate::assets::{AssetModel, AssetModelSet};
 use crate::game::Game;
-use crate::graphics::gpu::Models;
+use crate::graphics::gpu::ModelSet;
 
 mod gpu;
 pub use gpu::Vertex;
@@ -13,7 +13,7 @@ pub use gpu::Vertex;
 pub struct State {
     pub window: Arc<Window>,
     pub gpu: Gpu,
-    pub models: Models,
+    pub models: ModelSet,
 }
 
 impl State {
@@ -21,7 +21,7 @@ impl State {
         let window = Arc::new(window);
         let gpu = Gpu::new(window.clone());
 
-        let models = Models::load(&gpu, &assets);
+        let models = ModelSet::load(&gpu, &assets);
 
         Self {
             window,
@@ -36,7 +36,7 @@ impl State {
     }
 
     #[inline(always)]
-    pub fn render(&mut self, game: &Game, assets: &AssetModels) {
+    pub fn render(&mut self, game: &Game, assets: &AssetModelSet) {
         self.gpu.render(&self.window, game, &self.models, assets);
     }
 }

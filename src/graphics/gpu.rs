@@ -9,7 +9,7 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    assets::{self, AssetModel, AssetModels, ModelId},
+    assets::{self, AssetModel, AssetModelSet, ModelId},
     game::{Entity, Game, light::Light},
 };
 
@@ -135,8 +135,8 @@ impl Gpu {
         &mut self,
         window: &Window,
         game: &Game,
-        models: &Models,
-        asset_models: &AssetModels,
+        models: &ModelSet,
+        asset_models: &AssetModelSet,
     ) {
         let frame = match self.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
@@ -445,11 +445,11 @@ impl Transforms {
     }
 }
 
-struct GpuMaterial {
+struct Material {
     bind_group: BindGroup,
 }
 
-impl GpuMaterial {
+impl Material {
     fn new(
         device: &Device,
         queue: &Queue,
@@ -536,7 +536,7 @@ impl GpuMaterial {
 
 struct Model {
     meshes: Vec<Mesh>,
-    materials: Vec<GpuMaterial>,
+    materials: Vec<Material>,
 }
 
 impl Model {
@@ -549,9 +549,7 @@ impl Model {
         let materials = model
             .materials
             .iter()
-            .map(|material| {
-                GpuMaterial::new(&gpu.device, &gpu.queue, &gpu.material_layout, material)
-            })
+            .map(|material| Material::new(&gpu.device, &gpu.queue, &gpu.material_layout, material))
             .collect();
         Self { meshes, materials }
     }
@@ -579,12 +577,7 @@ impl Mesh {
         Self { primitives }
     }
 
-    fn draw(
-        &self,
-        render_pass: &mut RenderPass<'_>,
-        materials: &[GpuMaterial],
-        transform_index: u32,
-    ) {
+    fn draw(&self, render_pass: &mut RenderPass<'_>, materials: &[Material], transform_index: u32) {
         let mut last_material_index = None;
 
         for primitive in &self.primitives {
@@ -636,9 +629,9 @@ impl Primitive {
     }
 }
 
-pub struct Models(Vec<Model>);
+pub struct ModelSet(Vec<Model>);
 
-impl Models {
+impl ModelSet {
     pub fn load(gpu: &Gpu, models: &[AssetModel]) -> Self {
         Self(models.iter().map(|model| Model::load(gpu, model)).collect())
     }
