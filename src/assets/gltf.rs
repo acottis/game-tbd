@@ -7,12 +7,9 @@ use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
 use crate::assets::{Material, Mesh, Primitive};
-use crate::game::animation::{AnimationId, AnimationSet};
+use crate::game::animation::{AnimationId, AnimationSet, Rotation, Scale, Translation};
 use crate::graphics::Vertex;
-use crate::{
-    assets::AssetModel,
-    game::animation::{AnimationChannel, AnimationClip, AnimationValues},
-};
+use crate::{assets::AssetModel, game::animation::AnimationClip};
 
 fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
     if let Some(info) = info {
@@ -40,12 +37,14 @@ fn load_animations(document: &Document, buffer: &[Data]) -> AnimationSet {
     let mut animation_set = AnimationSet::new();
 
     for animation in document.animations() {
-        let mut channels = Vec::new();
-        let mut duration: f32 = 0.0;
-
         let Some(name) = animation.name() else {
             panic!("Animation with no name!")
         };
+
+        let mut translations = Vec::new();
+        let mut rotations = Vec::new();
+        let mut scales = Vec::new();
+        let mut duration: f32 = 0.0;
 
         let id = AnimationId::try_from(name).unwrap();
 
@@ -53,29 +52,33 @@ fn load_animations(document: &Document, buffer: &[Data]) -> AnimationSet {
             let reader = channel.reader(|c| Some(&buffer[c.index()]));
 
             let times: Vec<f32> = reader.read_inputs().unwrap().collect();
+            let interpolation = channel.sampler().interpolation();
 
             duration = duration.max(*times.last().unwrap());
 
-            let values = match reader.read_outputs().unwrap() {
-                ReadOutputs::Translations(values) => {
-                    AnimationValues::Translation(values.map(Vec3::from).collect())
-                }
-                ReadOutputs::Rotations(values) => {
-                    AnimationValues::Rotation(values.into_f32().map(Quat::from_array).collect())
-                }
-                ReadOutputs::Scales(values) => {
-                    AnimationValues::Scale(values.map(Vec3::from_array).collect())
-                }
+            match reader.read_outputs().unwrap() {
+                ReadOutputs::Translations(values) => translations.push(Translation::new(
+                    interpolation,
+                    times,
+                    values.map(Vec3::from).collect(),
+                )),
+                ReadOutputs::Rotations(values) => rotations.push(Rotation::new(
+                    interpolation,
+                    times,
+                    values.into_f32().map(Quat::from_array).collect(),
+                )),
+                ReadOutputs::Scales(values) => scales.push(Scale::new(
+                    interpolation,
+                    times,
+                    values.map(Vec3::from).collect(),
+                )),
                 _ => unimplemented!(),
             };
-
-            channels.push(AnimationChannel {
-                interpolation: channel.sampler().interpolation(),
-                times,
-                values,
-            });
         }
-        animation_set.insert(id, AnimationClip { channels, duration });
+        animation_set.insert(
+            id,
+            AnimationClip::new(translations, rotations, scales, duration),
+        );
     }
     animation_set
 }

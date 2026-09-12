@@ -34,20 +34,6 @@ impl AnimationSet {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct AnimationChannel {
-    pub interpolation: Interpolation,
-    pub times: Vec<f32>,
-    pub values: AnimationValues,
-}
-
-#[derive(Debug, Clone)]
-pub enum AnimationValues {
-    Translation(Vec<Vec3>),
-    Rotation(Vec<Quat>),
-    Scale(Vec<Vec3>),
-}
-
 fn keyframes(times: &[f32], time: f32) -> (usize, usize, f32) {
     if times.len() <= 1 {
         return (0, 0, 0.0);
@@ -101,10 +87,80 @@ fn sample_quat(interpolation: Interpolation, times: &[f32], values: &[Quat], tim
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+pub struct Translation {
+    interpolation: Interpolation,
+    times: Vec<f32>,
+    values: Vec<Vec3>,
+}
+
+impl Translation {
+    pub fn new(interpolation: Interpolation, times: Vec<f32>, values: Vec<Vec3>) -> Self {
+        Self {
+            interpolation,
+            times,
+            values,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Rotation {
+    interpolation: Interpolation,
+    times: Vec<f32>,
+    values: Vec<Quat>,
+}
+
+impl Rotation {
+    pub fn new(interpolation: Interpolation, times: Vec<f32>, values: Vec<Quat>) -> Self {
+        Self {
+            interpolation,
+            times,
+            values,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Scale {
+    interpolation: Interpolation,
+    times: Vec<f32>,
+    values: Vec<Vec3>,
+}
+
+impl Scale {
+    pub fn new(interpolation: Interpolation, times: Vec<f32>, values: Vec<Vec3>) -> Self {
+        Self {
+            interpolation,
+            times,
+            values,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct AnimationClip {
-    pub channels: Vec<AnimationChannel>,
-    pub duration: f32,
+    translations: Vec<Translation>,
+    rotations: Vec<Rotation>,
+    scales: Vec<Scale>,
+
+    duration: f32,
+}
+
+impl AnimationClip {
+    pub fn new(
+        translations: Vec<Translation>,
+        rotations: Vec<Rotation>,
+        scales: Vec<Scale>,
+        duration: f32,
+    ) -> Self {
+        Self {
+            translations,
+            rotations,
+            scales,
+            duration,
+        }
+    }
 }
 
 impl AnimationClip {
@@ -116,21 +172,16 @@ impl AnimationClip {
         let mut rotation = Quat::IDENTITY;
         let mut scale = Vec3::ONE;
 
-        for channel in &self.channels {
-            match &channel.values {
-                AnimationValues::Translation(values) => {
-                    translation = sample_vec3(channel.interpolation, &channel.times, values, time);
-                }
-
-                AnimationValues::Rotation(values) => {
-                    rotation = sample_quat(channel.interpolation, &channel.times, values, time);
-                }
-
-                AnimationValues::Scale(values) => {
-                    scale = sample_vec3(channel.interpolation, &channel.times, values, time);
-                }
-            }
+        for channel in &self.translations {
+            translation = sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
         }
+        for channel in &self.rotations {
+            rotation = sample_quat(channel.interpolation, &channel.times, &channel.values, time);
+        }
+        for channel in &self.scales {
+            scale = sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
+        }
+
         (translation, rotation, scale)
     }
 }
