@@ -5,10 +5,7 @@ use glam::Mat4;
 pub use gltf::load;
 use image::DynamicImage;
 
-use crate::{
-    game::animation::{AnimationClip, AnimationSet},
-    graphics::Vertex,
-};
+use crate::{game::animation::AnimationSet, graphics::Vertex};
 
 #[derive(Clone, Copy)]
 #[repr(u8)]

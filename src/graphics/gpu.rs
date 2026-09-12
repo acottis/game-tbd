@@ -10,7 +10,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     assets::{self, AssetModel, AssetModels, ModelId},
-    game::{Game, light::Light},
+    game::{Entity, Game, light::Light},
 };
 
 pub struct Gpu {
@@ -176,22 +176,9 @@ impl Gpu {
 
         // Transform the models
         for entity in &game.entities {
-            let transform = match entity.animation {
-                Some(ref animation) => {
-                    let model = asset_models.get(entity.model);
-                    if let Some(clip) = model.animations.get(animation.id) {
-                        let (translation, rotation, scale) = clip.sample(animation.current_time);
+            let model = asset_models.get(entity.model);
+            let transform = animated_transform(entity, model);
 
-                        entity.transform()
-                            * Mat4::from_scale_rotation_translation(scale, rotation, translation)
-                    } else {
-                        log::warn!("Clip missing for animation!");
-                        entity.transform()
-                    }
-                }
-                None => entity.transform(),
-            };
-            let model = models.get(entity.model);
             for meshes in &model.meshes {
                 self.model_transforms
                     .transforms
@@ -228,6 +215,21 @@ impl Gpu {
         window.pre_present_notify();
         self.queue.present(frame);
     }
+}
+
+fn animated_transform(entity: &Entity, model: &AssetModel) -> Mat4 {
+    let Some(animation) = entity.animation.as_ref() else {
+        return entity.transform();
+    };
+
+    let Some(clip) = model.animations.get(animation.id) else {
+        log::warn!("Clip missing for animation {:?}", animation.id);
+        return entity.transform();
+    };
+
+    let (translation, rotation, scale) = clip.sample(animation.current_time);
+
+    entity.transform() * Mat4::from_scale_rotation_translation(scale, rotation, translation)
 }
 
 fn create_depth_view(device: &Device, size: PhysicalSize<u32>) -> TextureView {
@@ -564,7 +566,6 @@ impl Model {
 
 struct Mesh {
     primitives: Vec<Primitive>,
-    transform: Mat4,
 }
 
 impl Mesh {
@@ -575,10 +576,7 @@ impl Mesh {
             .map(|primitive| Primitive::load(device, primitive))
             .collect();
 
-        Self {
-            primitives,
-            transform: mesh.transform,
-        }
+        Self { primitives }
     }
 
     fn draw(

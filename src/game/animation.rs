@@ -1,7 +1,7 @@
 use glam::{Quat, Vec3};
 use gltf::animation::{Interpolation, Property};
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 #[repr(usize)]
 pub enum AnimationId {
     Jump = 0,
