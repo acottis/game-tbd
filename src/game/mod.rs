@@ -184,14 +184,21 @@ impl Game {
         });
         let light = Light::new(Vec3::new(100.0, 20.0, 20.0), Vec3::new(1.0, 1.0, 1.0), 0.9);
 
-        let cube = ModelId::Foo;
-        let cube_asset = assets.get(cube);
-        let entities = vec![Entity::new(
-            cube,
+        let player = Entity::new(
+            ModelId::Foo,
             Vec3::ZERO,
             Vec3::splat(0.3),
-            BoundingBox::new(cube_asset),
-        )];
+            BoundingBox::new(assets.get(ModelId::Foo)),
+        );
+
+        let platform = Entity::new(
+            ModelId::Platform,
+            Vec3::ONE,
+            Vec3::ONE,
+            BoundingBox::new(assets.get(ModelId::Platform)),
+        );
+
+        let entities = vec![player, platform];
 
         let ground_asset = assets.get(ModelId::Ground);
         let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(50.0), ground_asset);

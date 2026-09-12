@@ -1,5 +1,7 @@
 mod gltf;
 
+use std::path::Path;
+
 use ::gltf::mesh::BoundingBox;
 use glam::Mat4;
 pub use gltf::load;
@@ -11,8 +13,40 @@ use crate::{game::animation::AnimationSet, graphics::Vertex};
 #[repr(u8)]
 pub enum ModelId {
     Foo = 0,
-    _Cube = 1,
-    Ground = 2,
+    BoxTextured,
+    Cube,
+    Platform,
+    Ground,
+}
+
+impl ModelId {
+    pub const COUNT: usize = 5;
+}
+
+impl TryFrom<&Path> for ModelId {
+    type Error = String;
+
+    fn try_from(path: &Path) -> Result<Self, Self::Error> {
+        let Some(stem) = path.file_stem() else {
+            return Err(format!("invalid model filename: {}", path.display()));
+        };
+
+        let Some(name) = stem.to_str() else {
+            return Err(format!(
+                "model filename is not valid UTF-8: {}",
+                path.display()
+            ));
+        };
+
+        match name {
+            "foo" => Ok(Self::Foo),
+            "BoxTextured" => Ok(Self::BoxTextured),
+            "cube" => Ok(Self::Cube),
+            "platform" => Ok(Self::Platform),
+            "ground" => Ok(Self::Ground),
+            _ => Err(format!("unknown model '{name}': {}", path.display())),
+        }
+    }
 }
 
 pub struct Material {
@@ -42,8 +76,23 @@ pub struct AssetModelSet(pub Vec<AssetModel>);
 
 impl AssetModelSet {
     pub fn load() -> Self {
-        let paths = ["assets/foo.glb", "assets/cube.glb", "assets/ground.glb"];
-        Self(paths.into_iter().map(|path| load(path)).collect())
+        let dir = std::fs::read_dir("assets").unwrap();
+
+        let mut assets: Vec<Option<AssetModel>> = (0..ModelId::COUNT).map(|_| None).collect();
+        for entry in dir {
+            let path = entry.unwrap().path();
+
+            if path.extension().and_then(|ext| ext.to_str()) != Some("glb") {
+                continue;
+            }
+
+            let model_id = ModelId::try_from(path.as_path()).unwrap();
+
+            assets[model_id as usize] = Some(load(&path));
+        }
+
+        let assets = assets.into_iter().map(Option::unwrap).collect();
+        Self(assets)
     }
 
     pub fn get(&self, id: ModelId) -> &AssetModel {
