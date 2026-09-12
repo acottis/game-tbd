@@ -185,6 +185,16 @@ impl Gpu {
                     .push(transform * meshes.transform);
             }
         }
+        for object in &game.objects {
+            let model = asset_models.get(object.model);
+            let transform = object.transform();
+
+            for meshes in &model.meshes {
+                self.model_transforms
+                    .transforms
+                    .push(transform * meshes.transform);
+            }
+        }
         self.model_transforms
             .transforms
             .push(game.terrain.transform());
@@ -205,6 +215,11 @@ impl Gpu {
             for entity in &game.entities {
                 models
                     .get(entity.model)
+                    .draw(&mut render_pass, transform_index);
+            }
+            for object in &game.objects {
+                models
+                    .get(object.model)
                     .draw(&mut render_pass, transform_index);
             }
             models

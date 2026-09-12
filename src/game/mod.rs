@@ -93,11 +93,12 @@ impl Entity {
         self.animation = Some(Animation::new(AnimationId::Jump, None));
     }
 
+    #[inline(always)]
     fn bounds(&self) -> BoundingBox {
         self.bounding_box.transform(self.transform())
     }
 
-    fn check_collision(&mut self, terrain: &GroundCollision) {
+    fn check_terrain_collision(&mut self, terrain: &GroundCollision) {
         // None means OOB
         let Some(height) = terrain.height_at(self.position) else {
             return;
@@ -138,6 +139,9 @@ impl Entity {
     pub fn transform(&self) -> Mat4 {
         transform(self.position, self.rotation, self.scale)
     }
+
+    // TODO!!!!!!!!!!!
+    fn check_object_collision(&mut self, object: &Object) {}
 }
 
 pub struct Terrain {
@@ -151,6 +155,7 @@ pub struct Terrain {
 impl Terrain {
     pub fn new(model: ModelId, position: Vec3, scale: Vec3, asset: &AssetModel) -> Self {
         let rotation = Quat::IDENTITY;
+
         let transform = transform(position, rotation, scale);
         let collider = GroundCollision::new(asset, transform);
         Self {
@@ -168,8 +173,38 @@ impl Terrain {
     }
 }
 
+pub struct Object {
+    position: Vec3,
+    rotation: Quat,
+    scale: Vec3,
+    bounding_box: BoundingBox,
+    pub model: ModelId,
+}
+impl Object {
+    pub fn new(model: ModelId, position: Vec3, scale: Vec3, bounding_box: BoundingBox) -> Self {
+        Self {
+            position,
+            rotation: Quat::IDENTITY,
+            scale,
+            model,
+            bounding_box,
+        }
+    }
+
+    #[inline(always)]
+    fn bounds(&self) -> BoundingBox {
+        self.bounding_box.transform(self.transform())
+    }
+
+    #[inline(always)]
+    pub fn transform(&self) -> Mat4 {
+        transform(self.position, self.rotation, self.scale)
+    }
+}
+
 pub struct Game {
     pub entities: Vec<Entity>,
+    pub objects: Vec<Object>,
     pub terrain: Terrain,
     pub camera: Camera,
     pub light: Light,
@@ -178,6 +213,7 @@ pub struct Game {
 
 impl Game {
     pub fn new(assets: &AssetModelSet) -> Self {
+        let input = Input::new();
         let camera = Camera::new(&winit::dpi::PhysicalSize {
             width: 800,
             height: 600,
@@ -191,14 +227,15 @@ impl Game {
             BoundingBox::new(assets.get(ModelId::Foo)),
         );
 
-        let platform = Entity::new(
+        let platform = Object::new(
             ModelId::Platform,
-            Vec3::ONE,
+            Vec3::ONE * 2.0,
             Vec3::ONE,
             BoundingBox::new(assets.get(ModelId::Platform)),
         );
 
-        let entities = vec![player, platform];
+        let entities = vec![player];
+        let objects = vec![platform];
 
         let ground_asset = assets.get(ModelId::Ground);
         let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(50.0), ground_asset);
@@ -207,7 +244,8 @@ impl Game {
             terrain,
             camera,
             light,
-            input: Input::new(),
+            input,
+            objects,
         }
     }
 
@@ -230,7 +268,7 @@ impl Game {
             movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(5.0);
+            player.jump(7.5);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(delta_time * 10.0)
@@ -271,7 +309,11 @@ impl Game {
 
             entity.apply_gravity(delta_time);
             entity.apply_velocity(delta_time);
-            entity.check_collision(&self.terrain.collider);
+            entity.check_terrain_collision(&self.terrain.collider);
+
+            for object in &self.objects {
+                entity.check_object_collision(object);
+            }
         }
     }
 }

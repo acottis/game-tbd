@@ -65,12 +65,8 @@ fn sample_vec3(interpolation: Interpolation, times: &[f32], values: &[Vec3], tim
     let (i0, i1, t) = keyframes(times, time);
     match interpolation {
         Interpolation::Step => values[i0],
-
         Interpolation::Linear => values[i0].lerp(values[i1], t),
-
-        Interpolation::CubicSpline => {
-            todo!("Cubic spline")
-        }
+        Interpolation::CubicSpline => todo!("Cubic spline"),
     }
 }
 
@@ -78,12 +74,8 @@ fn sample_quat(interpolation: Interpolation, times: &[f32], values: &[Quat], tim
     let (i0, i1, t) = keyframes(times, time);
     match interpolation {
         Interpolation::Step => values[i0],
-
         Interpolation::Linear => values[i0].slerp(values[i1], t),
-
-        Interpolation::CubicSpline => {
-            todo!("Cubic spline")
-        }
+        Interpolation::CubicSpline => todo!("Cubic spline"),
     }
 }
 

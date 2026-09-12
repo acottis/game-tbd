@@ -75,6 +75,7 @@ pub struct AssetModel {
 pub struct AssetModelSet(pub Vec<AssetModel>);
 
 impl AssetModelSet {
+    // TODO: Consider using include_bytes! instead
     pub fn load() -> Self {
         let dir = std::fs::read_dir("assets").unwrap();
 
