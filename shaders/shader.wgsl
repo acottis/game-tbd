@@ -6,7 +6,7 @@ struct Material {
 }
 
 struct Light {
-	position: vec3<f32>,
+	direction: vec3<f32>,
 	intensity: f32,
 	colour: vec3<f32>,
 	ambient: f32,
@@ -34,9 +34,9 @@ var<uniform> light: Light;
 @group(2) @binding(0)
 var<uniform> material: Material;
 @group(2) @binding(1)
-var t_diffuse: texture_2d<f32>;
+var texture: texture_2d<f32>;
 @group(2) @binding(2)
-var s_diffuse: sampler;
+var texture_sampler: sampler;
 
 @group(3) @binding(0)
 var<storage, read> model_transforms: array<mat4x4<f32>>;
@@ -55,17 +55,21 @@ fn vs_main(in: VertexInput, @builtin(instance_index) index: u32) -> VertexOutput
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var colour = material.base_colour;
+
     if material.has_texture == 1 {
-        colour *= textureSample(t_diffuse, s_diffuse, in.uv);
+        colour *= textureSample(texture, texture_sampler, in.uv);
     }
 
-    let light_dir = normalize(light.position - in.world_position.xyz);
-    let diffuse_strength = max(dot(in.normal, light_dir), 0.0);
+    let light_direction = normalize(-light.direction);
+
+    // How directly the surface faces the light
+    let diffuse_strength = max(dot(in.normal, light_direction), 0.0);
+
     let diffuse = light.colour * diffuse_strength * light.intensity;
 
     let lighting = light.ambient + diffuse;
 
-    let lit_colour = vec3<f32>(colour.rgb) * lighting;
+    let lit_colour = colour.rgb * lighting;
 
     return vec4<f32>(lit_colour, colour.a);
 }

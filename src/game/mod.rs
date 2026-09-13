@@ -245,11 +245,12 @@ impl Game {
             width: 800,
             height: 600,
         });
+
         let light = Light::new(
-            Vec3::new(3.0, 10.0, 3.0),
+            Vec3::new(10.0, -2.0, 1.0),
             Vec3::new(1.0, 1.0, 1.0),
-            0.5,
-            0.15,
+            1.0,
+            0.1,
         );
 
         let player = Entity::new(
