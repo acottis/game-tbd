@@ -72,8 +72,9 @@ impl Entity {
         self.position
     }
 
-    pub fn move_direction(&mut self, distance: f32, rotation_factor: f32, direction: Vec3) {
-        self.position += direction * distance;
+    pub fn move_direction(&mut self, speed: f32, rotation_factor: f32, direction: Vec3) {
+        self.velocity.z = direction.z * speed;
+        self.velocity.x = direction.x * speed;
 
         if direction.length_squared() > 0.0 {
             let angle = direction.x.atan2(direction.z);
@@ -106,6 +107,7 @@ impl Entity {
 
         if self.velocity.y <= 0.0 && self.bounds().min.y <= height {
             self.position.y += height - self.bounds().min.y;
+            self.velocity.y = 0.0;
             self.ground();
         }
     }
@@ -113,17 +115,11 @@ impl Entity {
     fn ground(&mut self) {
         self.falling = false;
         self.animation = None;
-        self.velocity.y = 0.0;
     }
 
     #[inline(always)]
     fn apply_gravity(&mut self, delta_time: f32) {
         self.velocity += GRAVITY * delta_time;
-    }
-
-    #[inline(always)]
-    fn apply_velocity(&mut self, delta_time: f32) {
-        self.position += self.velocity * delta_time;
     }
 
     const fn animate(&mut self, delta_time: f32) {
@@ -151,18 +147,25 @@ impl Entity {
         let movement = self.velocity * delta_time;
         let bounds = self.bounds();
 
-        let mut collided = false;
         for object in objects {
             if let Some((time, normal)) = bounds.sweep(movement, &object.bounds()) {
-                collided = true;
-                if normal.y == 1.0 {
+                // println!("COLLISION time={time}, normal={normal:?}, movement={movement:?}");
+                if normal.y == 1.0 && movement.y < 0.0 {
                     self.ground();
+                }
+                if normal.y != 0.0 {
+                    self.velocity.y = 0.0;
+                }
+                if normal.z != 0.0 {
+                    self.velocity.z = 0.0;
+                }
+                if normal.x != 0.0 {
+                    self.velocity.x = 0.0;
                 }
             }
         }
-        if !collided {
-            self.apply_velocity(delta_time);
-        }
+
+        self.position += self.velocity * delta_time;
         self.check_terrain_collision(ground);
     }
 }
@@ -321,7 +324,7 @@ impl Game {
             return true;
         }
         let rotation_factor = (10.0 * delta_time).min(1.0);
-        player.move_direction(delta_time * 5.0, rotation_factor, movement);
+        player.move_direction(5.0, rotation_factor, movement);
         camera.follow(player.position());
         false
     }

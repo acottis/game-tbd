@@ -2,7 +2,7 @@ use glam::{Mat3, Mat4, Vec3};
 
 use crate::assets::AssetModel;
 
-pub const GRAVITY: Vec3 = Vec3::new(0.0, -7.0, 0.0);
+pub const GRAVITY: Vec3 = Vec3::new(0.0, -9.81, 0.0);
 
 pub struct BoundingBox {
     pub min: Vec3,
