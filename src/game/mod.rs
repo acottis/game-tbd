@@ -150,6 +150,7 @@ impl Entity {
         for object in objects {
             if let Some((time, normal)) = bounds.sweep(movement, &object.bounds()) {
                 // println!("COLLISION time={time}, normal={normal:?}, movement={movement:?}");
+
                 if normal.y == 1.0 && movement.y < 0.0 {
                     self.ground();
                 }
@@ -244,7 +245,12 @@ impl Game {
             width: 800,
             height: 600,
         });
-        let light = Light::new(Vec3::new(100.0, 20.0, 20.0), Vec3::new(1.0, 1.0, 1.0), 0.9);
+        let light = Light::new(
+            Vec3::new(3.0, 10.0, 3.0),
+            Vec3::new(1.0, 1.0, 1.0),
+            0.5,
+            0.15,
+        );
 
         let player = Entity::new(
             ModelId::Foo,
@@ -264,7 +270,12 @@ impl Game {
         let objects = vec![platform];
 
         let ground_asset = assets.get(ModelId::Ground);
-        let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(50.0), ground_asset);
+        let terrain = Terrain::new(
+            ModelId::Ground,
+            Vec3::ZERO,
+            Vec3::splat(100.0),
+            ground_asset,
+        );
         Self {
             entities,
             terrain,

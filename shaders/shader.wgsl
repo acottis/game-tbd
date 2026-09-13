@@ -7,8 +7,9 @@ struct Material {
 
 struct Light {
 	position: vec3<f32>,
-	colour: vec3<f32>,
 	intensity: f32,
+	colour: vec3<f32>,
+	ambient: f32,
 }
 
 struct VertexInput {
@@ -61,7 +62,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_dir = normalize(light.position - in.world_position.xyz);
     let diffuse_strength = max(dot(in.normal, light_dir), 0.0);
     let diffuse = light.colour * diffuse_strength * light.intensity;
-    let lit_colour = vec3<f32>(colour.rgb) * diffuse;
+
+    let lighting = light.ambient + diffuse;
+
+    let lit_colour = vec3<f32>(colour.rgb) * lighting;
 
     return vec4<f32>(lit_colour, colour.a);
 }
