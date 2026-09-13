@@ -106,17 +106,22 @@ impl Entity {
 
         if self.velocity.y <= 0.0 && self.bounds().min.y <= height {
             self.position.y += height - self.bounds().min.y;
-            self.velocity.y = 0.0;
-
-            self.falling = false;
-            self.animation = None;
+            self.ground();
         }
     }
 
+    fn ground(&mut self) {
+        self.falling = false;
+        self.animation = None;
+        self.velocity.y = 0.0;
+    }
+
+    #[inline(always)]
     fn apply_gravity(&mut self, delta_time: f32) {
         self.velocity += GRAVITY * delta_time;
     }
 
+    #[inline(always)]
     fn apply_velocity(&mut self, delta_time: f32) {
         self.position += self.velocity * delta_time;
     }
@@ -140,8 +145,26 @@ impl Entity {
         transform(self.position, self.rotation, self.scale)
     }
 
-    // TODO!!!!!!!!!!!
-    fn check_object_collision(&mut self, object: &Object) {}
+    fn move_and_collide(&mut self, delta_time: f32, ground: &GroundCollision, objects: &[Object]) {
+        self.apply_gravity(delta_time);
+
+        let movement = self.velocity * delta_time;
+        let bounds = self.bounds();
+
+        let mut collided = false;
+        for object in objects {
+            if let Some((time, normal)) = bounds.sweep(movement, &object.bounds()) {
+                collided = true;
+                if normal.y == 1.0 {
+                    self.ground();
+                }
+            }
+        }
+        if !collided {
+            self.apply_velocity(delta_time);
+        }
+        self.check_terrain_collision(ground);
+    }
 }
 
 pub struct Terrain {
@@ -307,13 +330,7 @@ impl Game {
         for entity in &mut self.entities {
             entity.animate(delta_time);
 
-            entity.apply_gravity(delta_time);
-            entity.apply_velocity(delta_time);
-            entity.check_terrain_collision(&self.terrain.collider);
-
-            for object in &self.objects {
-                entity.check_object_collision(object);
-            }
+            entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
         }
     }
 }
