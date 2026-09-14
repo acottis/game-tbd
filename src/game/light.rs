@@ -25,11 +25,12 @@ impl Light {
         }
     }
 
+    // TODO: Fix this, shadows only work in certain area
     pub fn shadow_transform(&self, target: Vec3) -> Mat4 {
         let direction = self.direction.normalize();
         let position = target - direction * 50.0;
 
-        let proj = proj::directx::orthographic(-20.0, 20.0, -20.0, 20.0, 0.1, 100.0);
+        let proj = proj::directx::orthographic(-40.0, 40.0, -40.0, 20.0, 0.1, 100.0);
         let view = view::look_at_mat4(position, target, Vec3::Y);
 
         proj * view

@@ -130,6 +130,8 @@ struct Shadows {
 }
 
 impl Shadows {
+    const RESOLUTION: u32 = 8192;
+
     fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
         let camera_layout = GpuTransform::layout(&device, Some("Camera"));
         let camera = GpuTransform::new(&device, &camera_layout, Some("Shadow camera"));
@@ -137,8 +139,8 @@ impl Shadows {
         let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Shadow Map"),
             size: wgpu::Extent3d {
-                width: 2048,
-                height: 2048,
+                width: Self::RESOLUTION,
+                height: Self::RESOLUTION,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -527,8 +529,10 @@ struct Transform {
 
 impl Transform {
     fn new(model: Mat4) -> Self {
-        let normal = model.inverse().transpose();
-        Self { model, normal }
+        Self {
+            model,
+            normal: model.inverse().transpose(),
+        }
     }
 }
 
