@@ -1,4 +1,4 @@
-struct ModelTransform {
+struct Transform {
     model: mat4x4<f32>,
     normal: mat4x4<f32>,
 }
@@ -51,17 +51,17 @@ var texture: texture_2d<f32>;
 var texture_sampler: sampler;
 
 @group(3) @binding(0)
-var<storage, read> models: array<ModelTransform>;
+var<storage, read> transforms: array<Transform>;
 
 @vertex
 fn vs_main(in: VertexInput, @builtin(instance_index) index: u32) -> VertexOutput {
-    let model = models[index];
-    let world_position = model.model * vec4<f32>(in.vertex, 1.0);
+    let transform = transforms[index];
+    let world_position = transform.model * vec4<f32>(in.vertex, 1.0);
 
     var out: VertexOutput;
     out.position = view_projection * world_position;
     out.uv = in.uv;
-    out.normal = (model.normal * vec4<f32>(in.normal, 0.0)).xyz;
+    out.normal = (transform.normal * vec4<f32>(in.normal, 0.0)).xyz;
     
     out.shadow_position = light_view_projection * world_position;
 

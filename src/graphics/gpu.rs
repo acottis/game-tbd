@@ -124,15 +124,15 @@ impl Lighting {
 
 struct Shadows {
     view: TextureView,
-    camera: Transform,
+    camera: GpuTransform,
     pipeline: RenderPipeline,
     sampler: Sampler,
 }
 
 impl Shadows {
     fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
-        let camera_layout = Transform::layout(&device, Some("Camera"));
-        let camera = Transform::new(&device, &camera_layout, Some("Shadow camera"));
+        let camera_layout = GpuTransform::layout(&device, Some("Camera"));
+        let camera = GpuTransform::new(&device, &camera_layout, Some("Shadow camera"));
 
         let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Shadow Map"),
@@ -281,7 +281,7 @@ pub struct Gpu {
     render_pipeline: RenderPipeline,
     depth_view: TextureView,
 
-    camera: Transform,
+    camera: GpuTransform,
     model_transforms: Transforms,
     model_transforms_layout: BindGroupLayout,
     material_layout: BindGroupLayout,
@@ -302,8 +302,8 @@ impl Gpu {
             .unwrap();
         surface.configure(&device, &surface_config);
 
-        let camera_layout = Transform::layout(&device, Some("Camera"));
-        let camera = Transform::new(&device, &camera_layout, Some("Camera"));
+        let camera_layout = GpuTransform::layout(&device, Some("Camera"));
+        let camera = GpuTransform::new(&device, &camera_layout, Some("Camera"));
 
         let model_transforms_layout = Transforms::layout(&device);
         let model_transforms = Transforms::new(&device, &model_transforms_layout, 64);
@@ -417,7 +417,7 @@ impl Gpu {
             let transform = animated_transform(entity, model);
 
             for meshes in &model.meshes {
-                let model_transform = ModelTransform::new(transform * meshes.transform);
+                let model_transform = Transform::new(transform * meshes.transform);
                 self.model_transforms.transforms.push(model_transform);
             }
         }
@@ -426,13 +426,13 @@ impl Gpu {
             let transform = object.transform();
 
             for meshes in &model.meshes {
-                let model_transform = ModelTransform::new(transform * meshes.transform);
+                let model_transform = Transform::new(transform * meshes.transform);
                 self.model_transforms.transforms.push(model_transform);
             }
         }
         let model = asset_models.get(game.terrain.model);
         for meshes in &model.meshes {
-            let model_transform = ModelTransform::new(game.terrain.transform() * meshes.transform);
+            let model_transform = Transform::new(game.terrain.transform() * meshes.transform);
             self.model_transforms.transforms.push(model_transform);
         }
 
@@ -520,24 +520,24 @@ impl Gpu {
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
 #[repr(C)]
-struct ModelTransform {
+struct Transform {
     model: Mat4,
     normal: Mat4,
 }
 
-impl ModelTransform {
+impl Transform {
     fn new(model: Mat4) -> Self {
         let normal = model.inverse().transpose();
         Self { model, normal }
     }
 }
 
-struct Transform {
+struct GpuTransform {
     buffer: Buffer,
     bind_group: BindGroup,
 }
 
-impl Transform {
+impl GpuTransform {
     fn new(device: &Device, layout: &BindGroupLayout, label: Option<&str>) -> Self {
         let buffer = device.create_buffer_init(&BufferInitDescriptor {
             label,
@@ -580,7 +580,7 @@ impl Transform {
 struct Transforms {
     buffer: Buffer,
     bind_group: BindGroup,
-    transforms: Vec<ModelTransform>,
+    transforms: Vec<Transform>,
     capacity: usize,
 }
 
@@ -588,7 +588,7 @@ impl Transforms {
     fn new(device: &Device, layout: &BindGroupLayout, capacity: usize) -> Self {
         let buffer = device.create_buffer(&BufferDescriptor {
             label: None,
-            size: (capacity * size_of::<ModelTransform>()) as u64,
+            size: (capacity * size_of::<Transform>()) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -631,7 +631,7 @@ impl Transforms {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(size_of::<ModelTransform>() as u64),
+                    min_binding_size: NonZeroU64::new(size_of::<Transform>() as u64),
                 },
                 count: None,
             }],
