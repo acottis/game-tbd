@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use glam::camera::rh;
+use glam::camera::rh::{proj, view};
 use glam::{Mat4, Quat, Vec3};
 use winit::dpi::PhysicalSize;
 
@@ -96,7 +96,7 @@ impl Camera {
     }
 
     pub fn view_projection_matrix(&self) -> Mat4 {
-        rh::proj::directx::perspective(self.fovy, self.aspect, self.near, self.far)
-            * rh::view::look_at_mat4(self.position, self.target, self.up)
+        proj::directx::perspective(self.fovy, self.aspect, self.near, self.far)
+            * view::look_at_mat4(self.position, self.target, self.up)
     }
 }

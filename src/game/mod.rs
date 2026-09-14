@@ -247,7 +247,7 @@ impl Game {
         });
 
         let light = Light::new(
-            Vec3::new(10.0, -2.0, 1.0),
+            Vec3::new(5.0, -2.0, 1.0),
             Vec3::new(1.0, 1.0, 1.0),
             1.0,
             0.1,

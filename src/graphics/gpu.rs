@@ -13,225 +13,6 @@ use crate::{
     game::{Entity, Game, light::Light},
 };
 
-pub struct Gpu {
-    surface: Surface<'static>,
-    surface_config: SurfaceConfiguration,
-    device: Device,
-    queue: Queue,
-
-    render_pipeline: RenderPipeline,
-
-    depth_view: TextureView,
-
-    material_layout: BindGroupLayout,
-
-    camera: Transform,
-    model_transforms: Transforms,
-    model_transforms_layout: BindGroupLayout,
-
-    light_bind_group: BindGroup,
-    light_buffer: Buffer,
-}
-
-impl Gpu {
-    pub fn new(window: Arc<Window>) -> Self {
-        let window_size = window.inner_size();
-        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
-        let surface = instance.create_surface(window).unwrap();
-
-        let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
-
-        let surface_config = surface
-            .get_default_config(&adapter, window_size.width, window_size.height)
-            .unwrap();
-        surface.configure(&device, &surface_config);
-
-        let camera_layout = camera_layout(&device);
-        let camera = Transform::new(&device, &camera_layout, Some("camera"));
-
-        let model_transforms_layout = model_transforms_layout(&device);
-        let model_transforms = Transforms::new(&device, &model_transforms_layout, 64);
-
-        let (light_bind_group, light_buffer, light_layout) = load_light(&device);
-        let material_layout = material_layout(&device);
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &[
-                Some(&camera_layout),
-                Some(&light_layout),
-                Some(&material_layout),
-                Some(&model_transforms_layout),
-            ],
-            immediate_size: 0,
-        });
-
-        let shader = device.create_shader_module(include_wgsl!("../../shaders/shader.wgsl"));
-
-        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: None,
-                compilation_options: Default::default(),
-                buffers: &[Some(Vertex::layout())],
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: None,
-                compilation_options: Default::default(),
-                targets: &[Some(surface_config.format.into())],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: FrontFace::Ccw,
-                cull_mode: None,
-                unclipped_depth: false,
-                polygon_mode: PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(CompareFunction::Less),
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }),
-            multisample: MultisampleState::default(),
-            cache: None,
-            multiview_mask: None,
-        });
-
-        let depth_view = create_depth_view(&device, window_size);
-
-        log::info!("{:#?}", adapter.get_info());
-
-        Self {
-            surface,
-            surface_config,
-            device,
-            queue,
-            render_pipeline,
-            material_layout,
-            depth_view,
-            camera,
-            light_bind_group,
-            light_buffer,
-            model_transforms,
-            model_transforms_layout,
-        }
-    }
-
-    pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        self.surface_config.height = size.height;
-        self.surface_config.width = size.width;
-        self.surface.configure(&self.device, &self.surface_config);
-        self.depth_view = create_depth_view(&self.device, size);
-    }
-
-    pub fn render(
-        &mut self,
-        window: &Window,
-        game: &Game,
-        models: &ModelSet,
-        asset_models: &AssetModelSet,
-    ) {
-        let frame = match self.surface.get_current_texture() {
-            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
-            e => unimplemented!("{e:?}"),
-        };
-        let view = &frame.texture.create_view(&Default::default());
-
-        let render_pass_desc = RenderPassDescriptor {
-            label: None,
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Clear(Default::default()),
-                    store: StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &self.depth_view,
-                depth_ops: Some(Operations {
-                    load: LoadOp::Clear(1.0),
-                    store: StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        };
-
-        self.camera
-            .write(&self.queue, &game.camera.view_projection_matrix());
-        self.queue
-            .write_buffer(&self.light_buffer, 0, bytes_of(&game.light));
-
-        // Transform the models
-        for entity in &game.entities {
-            let model = asset_models.get(entity.model);
-            let transform = animated_transform(entity, model);
-
-            for meshes in &model.meshes {
-                self.model_transforms
-                    .transforms
-                    .push(transform * meshes.transform);
-            }
-        }
-        for object in &game.objects {
-            let model = asset_models.get(object.model);
-            let transform = object.transform();
-
-            for meshes in &model.meshes {
-                self.model_transforms
-                    .transforms
-                    .push(transform * meshes.transform);
-            }
-        }
-        self.model_transforms
-            .transforms
-            .push(game.terrain.transform());
-        self.model_transforms
-            .write(&self.device, &self.queue, &self.model_transforms_layout);
-
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-
-        // GPU work goes here
-        {
-            let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
-            render_pass.set_bind_group(1, &self.light_bind_group, &[]);
-            render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
-
-            let transform_index = &mut 0;
-            for entity in &game.entities {
-                models
-                    .get(entity.model)
-                    .draw(&mut render_pass, transform_index);
-            }
-            for object in &game.objects {
-                models
-                    .get(object.model)
-                    .draw(&mut render_pass, transform_index);
-            }
-            models
-                .get(game.terrain.model)
-                .draw(&mut render_pass, transform_index);
-        }
-        self.queue.submit([encoder.finish()]);
-        window.pre_present_notify();
-        self.queue.present(frame);
-    }
-}
-
 fn animated_transform(entity: &Entity, model: &AssetModel) -> Mat4 {
     let Some(animation) = entity.animation.as_ref() else {
         return entity.transform();
@@ -265,72 +46,6 @@ fn create_depth_view(device: &Device, size: PhysicalSize<u32>) -> TextureView {
     depth_texture.create_view(&TextureViewDescriptor::default())
 }
 
-fn material_layout(device: &Device) -> BindGroupLayout {
-    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("Texture"),
-        entries: &[
-            BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(size_of::<MaterialUniform>() as u64),
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Float { filterable: true },
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 2,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-    })
-}
-
-fn model_transforms_layout(device: &Device) -> BindGroupLayout {
-    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("Model Transforms"),
-        entries: &[BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::VERTEX,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Storage { read_only: true },
-                has_dynamic_offset: false,
-                min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
-            },
-            count: None,
-        }],
-    })
-}
-
-fn camera_layout(device: &Device) -> BindGroupLayout {
-    device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("Camera"),
-        entries: &[BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::VERTEX,
-            count: None,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
-            },
-        }],
-    })
-}
-
 async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter, Device, Queue) {
     let adapter = instance
         .request_adapter(&RequestAdapterOptions {
@@ -354,10 +69,19 @@ async fn init_wgpu(instance: &Instance, surface: &Surface<'static>) -> (Adapter,
         .unwrap();
     (adapter, device, queue)
 }
-fn load_light(device: &Device) -> (BindGroup, Buffer, BindGroupLayout) {
-    let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-        label: Some("Light"),
-        entries: &[BindGroupLayoutEntry {
+
+struct Lighting {
+    shadows: Shadows,
+    buffer: Buffer,
+    layout: BindGroupLayout,
+    bind_group: BindGroup,
+}
+
+impl Lighting {
+    fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
+        let shadows = Shadows::new(device, model_transforms_layout);
+
+        let mut bind_group_layout_entires = vec![BindGroupLayoutEntry {
             binding: 0,
             visibility: ShaderStages::FRAGMENT,
             count: None,
@@ -366,23 +90,431 @@ fn load_light(device: &Device) -> (BindGroup, Buffer, BindGroupLayout) {
                 has_dynamic_offset: false,
                 min_binding_size: NonZeroU64::new(Light::SIZE as u64),
             },
-        }],
-    });
-    let buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: Some("Light"),
-        contents: &[0u8; Light::SIZE],
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-    });
-    let bind_group = device.create_bind_group(&BindGroupDescriptor {
-        label: Some("Light"),
-        entries: &[BindGroupEntry {
+        }];
+        bind_group_layout_entires.extend(shadows.bind_group_layout_entries());
+        let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Lighting"),
+            entries: &bind_group_layout_entires,
+        });
+        let buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Lighting"),
+            contents: &[0u8; Light::SIZE],
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let mut bind_group_entries = vec![BindGroupEntry {
             binding: 0,
             resource: buffer.as_entire_binding(),
-        }],
-        layout: &layout,
-    });
+        }];
+        bind_group_entries.extend(shadows.bind_group_entries());
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Lighting"),
+            entries: &bind_group_entries,
+            layout: &layout,
+        });
 
-    (bind_group, buffer, layout)
+        Self {
+            shadows,
+            buffer,
+            layout,
+            bind_group,
+        }
+    }
+}
+
+struct Shadows {
+    view: TextureView,
+    camera: Transform,
+    pipeline: RenderPipeline,
+    sampler: Sampler,
+}
+
+impl Shadows {
+    fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
+        let camera_layout = Transform::layout(&device, Some("Camera"));
+        let camera = Transform::new(&device, &camera_layout, Some("Shadow camera"));
+
+        let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Shadow Map"),
+            size: wgpu::Extent3d {
+                width: 2048,
+                height: 2048,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = shadow_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let sampler = device.create_sampler(&SamplerDescriptor {
+            label: Some("Shadow Sampler"),
+            compare: Some(CompareFunction::LessEqual),
+            ..Default::default()
+        });
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("Shadow Pipeline Layout"),
+            bind_group_layouts: &[Some(&camera_layout), Some(&model_transforms_layout)],
+            immediate_size: 0,
+        });
+        let shader = device.create_shader_module(include_wgsl!("../../shaders/shadow.wgsl"));
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Shadow Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                buffers: &[Some(Vertex::layout())],
+            },
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                // Dont render the back of the triangle
+                cull_mode: Some(Face::Back),
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(CompareFunction::Less),
+                stencil: StencilState::default(),
+                bias: DepthBiasState {
+                    constant: 0,
+                    slope_scale: 0.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: MultisampleState::default(),
+            fragment: None,
+            multiview_mask: None,
+            cache: None,
+        });
+
+        Self {
+            view,
+            camera,
+            pipeline,
+            sampler,
+        }
+    }
+
+    fn bind_group_entries(&self) -> [BindGroupEntry<'_>; 3] {
+        [
+            BindGroupEntry {
+                binding: 1,
+                resource: self.camera.buffer.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 2,
+                resource: BindingResource::TextureView(&self.view),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: BindingResource::Sampler(&self.sampler),
+            },
+        ]
+    }
+
+    fn bind_group_layout_entries(&self) -> [BindGroupLayoutEntry; 3] {
+        [
+            BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Depth,
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 3,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Comparison),
+                count: None,
+            },
+        ]
+    }
+
+    fn render_pass_descriptor(&self) -> RenderPassDescriptor<'_> {
+        RenderPassDescriptor {
+            label: Some("Shadow"),
+            color_attachments: &[],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        }
+    }
+}
+
+pub struct Gpu {
+    surface: Surface<'static>,
+    surface_config: SurfaceConfiguration,
+    device: Device,
+    queue: Queue,
+
+    render_pipeline: RenderPipeline,
+    depth_view: TextureView,
+
+    camera: Transform,
+    model_transforms: Transforms,
+    model_transforms_layout: BindGroupLayout,
+    material_layout: BindGroupLayout,
+
+    lighting: Lighting,
+}
+
+impl Gpu {
+    pub fn new(window: Arc<Window>) -> Self {
+        let window_size = window.inner_size();
+        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
+        let surface = instance.create_surface(window).unwrap();
+
+        let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
+
+        let surface_config = surface
+            .get_default_config(&adapter, window_size.width, window_size.height)
+            .unwrap();
+        surface.configure(&device, &surface_config);
+
+        let camera_layout = Transform::layout(&device, Some("Camera"));
+        let camera = Transform::new(&device, &camera_layout, Some("Camera"));
+
+        let model_transforms_layout = Transforms::layout(&device);
+        let model_transforms = Transforms::new(&device, &model_transforms_layout, 64);
+
+        let lighting = Lighting::new(&device, &model_transforms_layout);
+        let material_layout = Material::layout(&device);
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[
+                Some(&camera_layout),
+                Some(&lighting.layout),
+                Some(&material_layout),
+                Some(&model_transforms_layout),
+            ],
+            immediate_size: 0,
+        });
+        let shader = device.create_shader_module(include_wgsl!("../../shaders/main.wgsl"));
+        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                buffers: &[Some(Vertex::layout())],
+            },
+            fragment: Some(FragmentState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                targets: &[Some(surface_config.format.into())],
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                // Dont render the back of the triangle
+                cull_mode: Some(Face::Back),
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(CompareFunction::Less),
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
+            multisample: MultisampleState::default(),
+            cache: None,
+            multiview_mask: None,
+        });
+
+        let depth_view = create_depth_view(&device, window_size);
+
+        log::info!("{:#?}", adapter.get_info());
+
+        Self {
+            surface,
+            surface_config,
+            device,
+            queue,
+            render_pipeline,
+            material_layout,
+            depth_view,
+            camera,
+            model_transforms,
+            model_transforms_layout,
+            lighting,
+        }
+    }
+
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        self.surface_config.height = size.height;
+        self.surface_config.width = size.width;
+        self.surface.configure(&self.device, &self.surface_config);
+        self.depth_view = create_depth_view(&self.device, size);
+    }
+
+    pub fn render(
+        &mut self,
+        window: &Window,
+        game: &Game,
+        models: &ModelSet,
+        asset_models: &AssetModelSet,
+    ) {
+        let frame = match self.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+            e => unimplemented!("{e:?}"),
+        };
+        let view = &frame.texture.create_view(&Default::default());
+
+        let light_view_proj = game.light.shadow_transform(Vec3::ZERO);
+        self.lighting
+            .shadows
+            .camera
+            .write(&self.queue, &light_view_proj);
+
+        self.camera
+            .write(&self.queue, &game.camera.view_projection_matrix());
+
+        self.queue
+            .write_buffer(&self.lighting.buffer, 0, bytes_of(&game.light));
+
+        // Transform the models
+        for entity in &game.entities {
+            let model = asset_models.get(entity.model);
+            let transform = animated_transform(entity, model);
+
+            for meshes in &model.meshes {
+                self.model_transforms
+                    .transforms
+                    .push(transform * meshes.transform);
+            }
+        }
+        for object in &game.objects {
+            let model = asset_models.get(object.model);
+            let transform = object.transform();
+
+            for meshes in &model.meshes {
+                self.model_transforms
+                    .transforms
+                    .push(transform * meshes.transform);
+            }
+        }
+        self.model_transforms
+            .transforms
+            .push(game.terrain.transform());
+        self.model_transforms
+            .write(&self.device, &self.queue, &self.model_transforms_layout);
+
+        let shadow_pass_desc = self.lighting.shadows.render_pass_descriptor();
+        let render_pass_desc = RenderPassDescriptor {
+            label: Some("Render"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Default::default()),
+                    store: StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                view: &self.depth_view,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(1.0),
+                    store: StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        };
+
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+
+        // Shadow pass
+        {
+            let mut shadow_pass = encoder.begin_render_pass(&shadow_pass_desc);
+            shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
+            shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
+            shadow_pass.set_bind_group(1, &self.model_transforms.bind_group, &[]);
+
+            let transform_index = &mut 0;
+            for entity in &game.entities {
+                models
+                    .get(entity.model)
+                    .draw_shadow(&mut shadow_pass, transform_index);
+            }
+            for object in &game.objects {
+                models
+                    .get(object.model)
+                    .draw_shadow(&mut shadow_pass, transform_index);
+            }
+            models
+                .get(game.terrain.model)
+                .draw_shadow(&mut shadow_pass, transform_index);
+        }
+        // Render the models/light
+        {
+            let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
+            render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
+
+            let transform_index = &mut 0;
+            for entity in &game.entities {
+                models
+                    .get(entity.model)
+                    .draw(&mut render_pass, transform_index);
+            }
+            for object in &game.objects {
+                models
+                    .get(object.model)
+                    .draw(&mut render_pass, transform_index);
+            }
+            models
+                .get(game.terrain.model)
+                .draw(&mut render_pass, transform_index);
+        }
+
+        self.queue.submit([encoder.finish()]);
+        window.pre_present_notify();
+        self.queue.present(frame);
+    }
 }
 
 pub struct Transform {
@@ -411,6 +543,22 @@ impl Transform {
 
     fn write(&mut self, queue: &Queue, transform: &Mat4) {
         queue.write_buffer(&self.buffer, 0, bytes_of(transform));
+    }
+
+    fn layout(device: &Device, label: Option<&str>) -> BindGroupLayout {
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label,
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                count: None,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                },
+            }],
+        })
     }
 }
 
@@ -457,6 +605,22 @@ impl Transforms {
         }
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&self.transforms));
         self.transforms.clear();
+    }
+
+    fn layout(device: &Device) -> BindGroupLayout {
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Model Transforms"),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                },
+                count: None,
+            }],
+        })
     }
 }
 
@@ -547,6 +711,40 @@ impl Material {
         });
         Self { bind_group }
     }
+
+    fn layout(device: &Device) -> BindGroupLayout {
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Texture"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(size_of::<MaterialUniform>() as u64),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: true },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        })
+    }
 }
 
 struct Model {
@@ -572,6 +770,13 @@ impl Model {
     fn draw(&self, render_pass: &mut RenderPass, transform_index: &mut u32) {
         for mesh in &self.meshes {
             mesh.draw(render_pass, &self.materials, *transform_index);
+            *transform_index += 1;
+        }
+    }
+
+    fn draw_shadow(&self, render_pass: &mut RenderPass, transform_index: &mut u32) {
+        for mesh in &self.meshes {
+            mesh.draw_shadow(render_pass, *transform_index);
             *transform_index += 1;
         }
     }
@@ -604,6 +809,18 @@ impl Mesh {
                     last_material_index = primitive.material_index;
                 }
             }
+            render_pass.set_vertex_buffer(0, primitive.vertex.slice(..));
+            render_pass.set_index_buffer(primitive.index.slice(..), IndexFormat::Uint32);
+            render_pass.draw_indexed(
+                0..primitive.indices_len,
+                0,
+                transform_index..transform_index + 1,
+            );
+        }
+    }
+
+    fn draw_shadow(&self, render_pass: &mut RenderPass<'_>, transform_index: u32) {
+        for primitive in &self.primitives {
             render_pass.set_vertex_buffer(0, primitive.vertex.slice(..));
             render_pass.set_index_buffer(primitive.index.slice(..), IndexFormat::Uint32);
             render_pass.draw_indexed(
