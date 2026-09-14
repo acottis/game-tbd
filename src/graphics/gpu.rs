@@ -188,8 +188,8 @@ impl Shadows {
                 depth_compare: Some(CompareFunction::Less),
                 stencil: StencilState::default(),
                 bias: DepthBiasState {
-                    constant: 0,
-                    slope_scale: 0.0,
+                    constant: 2,
+                    slope_scale: 2.0,
                     clamp: 0.0,
                 },
             }),
@@ -638,8 +638,9 @@ impl Transforms {
             }
         }
         let model = asset_models.get(game.terrain.model);
+        let transform = game.terrain.transform();
         for meshes in &model.meshes {
-            let model_transform = Transform::new(game.terrain.transform() * meshes.transform);
+            let model_transform = Transform::new(transform * meshes.transform);
             self.transforms.push(model_transform);
         }
 

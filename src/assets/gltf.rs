@@ -94,6 +94,7 @@ fn load_mesh(meshes: &mut Vec<Mesh>, mesh: gltf::Mesh, transform: Mat4, buffer: 
         let vertices = reader.read_positions().unwrap();
         let indices = reader.read_indices().unwrap().into_u32();
         let uvs = reader.read_tex_coords(0).unwrap().into_f32();
+
         if let Some(normals) = reader.read_normals() {
             for ((vertex, uv), normal) in vertices.zip(uvs).zip(normals) {
                 vertex_buffer.push(Vertex::new(vertex.into(), normal.into(), uv.into()));

@@ -29,7 +29,7 @@ impl Light {
         let direction = self.direction.normalize();
         let position = target - direction * 50.0;
 
-        let proj = proj::directx::orthographic(-40.0, 40.0, -40.0, 20.0, 0.1, 100.0);
+        let proj = proj::directx::orthographic(-100.0, 100.0, -100.0, 100.0, 0.1, 100.0);
         let view = view::look_at_mat4(position, target, Vec3::Y);
 
         proj * view
