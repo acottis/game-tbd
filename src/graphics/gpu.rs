@@ -78,8 +78,8 @@ struct Lighting {
 }
 
 impl Lighting {
-    fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
-        let shadows = Shadows::new(device, model_transforms_layout);
+    fn new(device: &Device, transforms_layout: &BindGroupLayout) -> Self {
+        let shadows = Shadows::new(device, transforms_layout);
 
         let mut bind_group_layout_entires = vec![BindGroupLayoutEntry {
             binding: 0,
@@ -132,7 +132,7 @@ struct Shadows {
 impl Shadows {
     const RESOLUTION: u32 = 8192;
 
-    fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
+    fn new(device: &Device, transforms_layout: &BindGroupLayout) -> Self {
         let camera_layout = GpuTransform::layout(&device, Some("Camera"));
         let camera = GpuTransform::new(&device, &camera_layout, Some("Shadow camera"));
 
@@ -159,7 +159,7 @@ impl Shadows {
         });
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Shadow Pipeline Layout"),
-            bind_group_layouts: &[Some(&camera_layout), Some(&model_transforms_layout)],
+            bind_group_layouts: &[Some(&camera_layout), Some(&transforms_layout)],
             immediate_size: 0,
         });
         let shader = device.create_shader_module(include_wgsl!("../../shaders/shadow.wgsl"));
@@ -284,8 +284,8 @@ pub struct Gpu {
     depth_view: TextureView,
 
     camera: GpuTransform,
-    model_transforms: Transforms,
-    model_transforms_layout: BindGroupLayout,
+    transforms: Transforms,
+    transforms_layout: BindGroupLayout,
     material_layout: BindGroupLayout,
 
     lighting: Lighting,
@@ -307,10 +307,10 @@ impl Gpu {
         let camera_layout = GpuTransform::layout(&device, Some("Camera"));
         let camera = GpuTransform::new(&device, &camera_layout, Some("Camera"));
 
-        let model_transforms_layout = Transforms::layout(&device);
-        let model_transforms = Transforms::new(&device, &model_transforms_layout, 64);
+        let transforms_layout = Transforms::layout(&device);
+        let transforms = Transforms::new(&device, &transforms_layout, 64);
 
-        let lighting = Lighting::new(&device, &model_transforms_layout);
+        let lighting = Lighting::new(&device, &transforms_layout);
         let material_layout = Material::layout(&device);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -319,7 +319,7 @@ impl Gpu {
                 Some(&camera_layout),
                 Some(&lighting.layout),
                 Some(&material_layout),
-                Some(&model_transforms_layout),
+                Some(&transforms_layout),
             ],
             immediate_size: 0,
         });
@@ -374,8 +374,8 @@ impl Gpu {
             material_layout,
             depth_view,
             camera,
-            model_transforms,
-            model_transforms_layout,
+            transforms,
+            transforms_layout,
             lighting,
         }
     }
@@ -385,6 +385,27 @@ impl Gpu {
         self.surface_config.width = size.width;
         self.surface.configure(&self.device, &self.surface_config);
         self.depth_view = create_depth_view(&self.device, size);
+    }
+
+    fn render_pass_descriptor<'tex>(
+        &'tex self,
+        color_attachments: &'tex [Option<RenderPassColorAttachment<'tex>>],
+    ) -> RenderPassDescriptor<'tex> {
+        RenderPassDescriptor {
+            label: Some("Render"),
+            color_attachments,
+            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                view: &self.depth_view,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(1.0),
+                    store: StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        }
     }
 
     pub fn render(
@@ -399,13 +420,11 @@ impl Gpu {
             // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
             e => unimplemented!("{e:?}"),
         };
-        let view = &frame.texture.create_view(&Default::default());
 
-        let light_view_proj = game.light.shadow_transform(Vec3::ZERO);
-        self.lighting
-            .shadows
-            .camera
-            .write(&self.queue, &light_view_proj);
+        self.lighting.shadows.camera.write(
+            &self.queue,
+            &game.light.shadow_transform(game.camera.target()),
+        );
 
         self.camera
             .write(&self.queue, &game.camera.view_projection_matrix());
@@ -414,57 +433,27 @@ impl Gpu {
             .write_buffer(&self.lighting.buffer, 0, bytes_of(&game.light));
 
         // Transform the models
-        for entity in &game.entities {
-            let model = asset_models.get(entity.model);
-            let transform = animated_transform(entity, model);
-
-            for meshes in &model.meshes {
-                let model_transform = Transform::new(transform * meshes.transform);
-                self.model_transforms.transforms.push(model_transform);
-            }
-        }
-        for object in &game.objects {
-            let model = asset_models.get(object.model);
-            let transform = object.transform();
-
-            for meshes in &model.meshes {
-                let model_transform = Transform::new(transform * meshes.transform);
-                self.model_transforms.transforms.push(model_transform);
-            }
-        }
-        let model = asset_models.get(game.terrain.model);
-        for meshes in &model.meshes {
-            let model_transform = Transform::new(game.terrain.transform() * meshes.transform);
-            self.model_transforms.transforms.push(model_transform);
-        }
-
-        self.model_transforms
-            .write(&self.device, &self.queue, &self.model_transforms_layout);
+        self.transforms.write(
+            &self.device,
+            &self.queue,
+            &self.transforms_layout,
+            game,
+            asset_models,
+        );
 
         let shadow_pass_desc = self.lighting.shadows.render_pass_descriptor();
-        let render_pass_desc = RenderPassDescriptor {
-            label: Some("Render"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Clear(Default::default()),
-                    store: StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &self.depth_view,
-                depth_ops: Some(Operations {
-                    load: LoadOp::Clear(1.0),
-                    store: StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        };
+
+        let view = &frame.texture.create_view(&Default::default());
+        let color_attachments = [Some(RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: Operations {
+                load: LoadOp::Clear(Default::default()),
+                store: StoreOp::Store,
+            },
+            depth_slice: None,
+        })];
+        let render_pass_desc = self.render_pass_descriptor(&color_attachments);
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
@@ -473,7 +462,7 @@ impl Gpu {
             let mut shadow_pass = encoder.begin_render_pass(&shadow_pass_desc);
             shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
             shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
-            shadow_pass.set_bind_group(1, &self.model_transforms.bind_group, &[]);
+            shadow_pass.set_bind_group(1, &self.transforms.bind_group, &[]);
 
             let transform_index = &mut 0;
             for entity in &game.entities {
@@ -496,7 +485,7 @@ impl Gpu {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
             render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
-            render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
+            render_pass.set_bind_group(3, &self.transforms.bind_group, &[]);
 
             let transform_index = &mut 0;
             for entity in &game.entities {
@@ -612,7 +601,14 @@ impl Transforms {
         }
     }
 
-    fn write(&mut self, device: &Device, queue: &Queue, layout: &BindGroupLayout) {
+    fn write(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        layout: &BindGroupLayout,
+        game: &Game,
+        asset_models: &AssetModelSet,
+    ) {
         // TODO: Think about this
         if self.transforms.len() > self.capacity {
             let transforms = std::mem::take(&mut self.transforms);
@@ -622,6 +618,31 @@ impl Transforms {
             new.transforms = transforms;
             *self = new;
         }
+
+        for entity in &game.entities {
+            let model = asset_models.get(entity.model);
+            let transform = animated_transform(entity, model);
+
+            for meshes in &model.meshes {
+                let model_transform = Transform::new(transform * meshes.transform);
+                self.transforms.push(model_transform);
+            }
+        }
+        for object in &game.objects {
+            let model = asset_models.get(object.model);
+            let transform = object.transform();
+
+            for meshes in &model.meshes {
+                let model_transform = Transform::new(transform * meshes.transform);
+                self.transforms.push(model_transform);
+            }
+        }
+        let model = asset_models.get(game.terrain.model);
+        for meshes in &model.meshes {
+            let model_transform = Transform::new(game.terrain.transform() * meshes.transform);
+            self.transforms.push(model_transform);
+        }
+
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&self.transforms));
         self.transforms.clear();
     }

@@ -25,7 +25,6 @@ impl Light {
         }
     }
 
-    // TODO: Fix this, shadows only work in certain area
     pub fn shadow_transform(&self, target: Vec3) -> Mat4 {
         let direction = self.direction.normalize();
         let position = target - direction * 50.0;

@@ -38,6 +38,10 @@ impl Camera {
         self.aspect = size.width as f32 / size.height as f32
     }
 
+    pub fn target(&self) -> Vec3 {
+        self.target
+    }
+
     pub fn follow(&mut self, target: Vec3) {
         let offset = self.position - self.target;
 
