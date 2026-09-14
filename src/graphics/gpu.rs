@@ -417,9 +417,8 @@ impl Gpu {
             let transform = animated_transform(entity, model);
 
             for meshes in &model.meshes {
-                self.model_transforms
-                    .transforms
-                    .push(transform * meshes.transform);
+                let model_transform = ModelTransform::new(transform * meshes.transform);
+                self.model_transforms.transforms.push(model_transform);
             }
         }
         for object in &game.objects {
@@ -427,14 +426,16 @@ impl Gpu {
             let transform = object.transform();
 
             for meshes in &model.meshes {
-                self.model_transforms
-                    .transforms
-                    .push(transform * meshes.transform);
+                let model_transform = ModelTransform::new(transform * meshes.transform);
+                self.model_transforms.transforms.push(model_transform);
             }
         }
-        self.model_transforms
-            .transforms
-            .push(game.terrain.transform());
+        let model = asset_models.get(game.terrain.model);
+        for meshes in &model.meshes {
+            let model_transform = ModelTransform::new(game.terrain.transform() * meshes.transform);
+            self.model_transforms.transforms.push(model_transform);
+        }
+
         self.model_transforms
             .write(&self.device, &self.queue, &self.model_transforms_layout);
 
@@ -485,7 +486,7 @@ impl Gpu {
             }
             models
                 .get(game.terrain.model)
-                .draw_shadow(&mut shadow_pass, transform_index);
+                .draw(&mut shadow_pass, transform_index);
         }
         // Render the models/light
         {
@@ -517,13 +518,27 @@ impl Gpu {
     }
 }
 
-pub struct Transform {
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
+#[repr(C)]
+struct ModelTransform {
+    model: Mat4,
+    normal: Mat4,
+}
+
+impl ModelTransform {
+    fn new(model: Mat4) -> Self {
+        let normal = model.inverse().transpose();
+        Self { model, normal }
+    }
+}
+
+struct Transform {
     buffer: Buffer,
     bind_group: BindGroup,
 }
 
 impl Transform {
-    pub fn new(device: &Device, layout: &BindGroupLayout, label: Option<&str>) -> Self {
+    fn new(device: &Device, layout: &BindGroupLayout, label: Option<&str>) -> Self {
         let buffer = device.create_buffer_init(&BufferInitDescriptor {
             label,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
@@ -565,7 +580,7 @@ impl Transform {
 struct Transforms {
     buffer: Buffer,
     bind_group: BindGroup,
-    transforms: Vec<Mat4>,
+    transforms: Vec<ModelTransform>,
     capacity: usize,
 }
 
@@ -573,7 +588,7 @@ impl Transforms {
     fn new(device: &Device, layout: &BindGroupLayout, capacity: usize) -> Self {
         let buffer = device.create_buffer(&BufferDescriptor {
             label: None,
-            size: (capacity * size_of::<Mat4>()) as u64,
+            size: (capacity * size_of::<ModelTransform>()) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -616,7 +631,7 @@ impl Transforms {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                    min_binding_size: NonZeroU64::new(size_of::<ModelTransform>() as u64),
                 },
                 count: None,
             }],
@@ -875,7 +890,7 @@ impl ModelSet {
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
 #[repr(C)]
-pub struct MaterialUniform {
+struct MaterialUniform {
     base_colour: [f32; 4],
     metallic: f32,
     roughness: f32,
@@ -883,7 +898,7 @@ pub struct MaterialUniform {
     _padding: [u8; 4],
 }
 impl MaterialUniform {
-    pub fn new(base_colour: [f32; 4], metallic: f32, roughness: f32, has_texture: bool) -> Self {
+    fn new(base_colour: [f32; 4], metallic: f32, roughness: f32, has_texture: bool) -> Self {
         Self {
             base_colour,
             metallic,

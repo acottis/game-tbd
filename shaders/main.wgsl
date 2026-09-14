@@ -1,3 +1,8 @@
+struct ModelTransform {
+    model: mat4x4<f32>,
+    normal: mat4x4<f32>,
+}
+
 struct Material {
     base_colour: vec4<f32>,
 	metallic: f32,
@@ -22,12 +27,11 @@ struct VertexOutput {
 	@builtin(position) position: vec4<f32>,
 	@location(0) normal: vec3<f32>,
 	@location(1) uv: vec2<f32>,
-	@location(2) world_position: vec4<f32>,
     @location(3) shadow_position: vec4<f32>,
 }
 
 @group(0) @binding(0)
-var<uniform> camera: mat4x4<f32>;
+var<uniform> view_projection: mat4x4<f32>;
 
 @group(1) @binding(0)
 var<uniform> light: Light;
@@ -47,46 +51,55 @@ var texture: texture_2d<f32>;
 var texture_sampler: sampler;
 
 @group(3) @binding(0)
-var<storage, read> model_transforms: array<mat4x4<f32>>;
+var<storage, read> models: array<ModelTransform>;
 
 @vertex
 fn vs_main(in: VertexInput, @builtin(instance_index) index: u32) -> VertexOutput {
-    let model_transform = model_transforms[index];
+    let model = models[index];
+    let world_position = model.model * vec4<f32>(in.vertex, 1.0);
+
     var out: VertexOutput;
-    out.world_position = model_transform * vec4<f32>(in.vertex, 1.0);
-    out.position = camera * out.world_position;
+    out.position = view_projection * world_position;
     out.uv = in.uv;
-    out.normal = normalize((model_transform * vec4<f32>(in.normal, 0.0)).xyz);
-    out.shadow_position = light_view_projection * out.world_position;
+    out.normal = (model.normal * vec4<f32>(in.normal, 0.0)).xyz;
+    
+    out.shadow_position = light_view_projection * world_position;
+
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let normal = normalize(in.normal);
     var colour = material.base_colour;
 
     if material.has_texture == 1 {
         colour *= textureSample(texture, texture_sampler, in.uv);
     }
 
+    // Lighting
     let light_direction = normalize(-light.direction);
     // How directly the surface faces the light
-    let diffuse_strength = max(dot(in.normal, light_direction), 0.0);
+    let diffuse_strength = max(dot(normal, light_direction), 0.0);
     let diffuse = light.colour * diffuse_strength * light.intensity;
 
-    let shadow_ndc = in.shadow_position.xyz / in.shadow_position.w;
+    // Shadows
+    let shadow_coordinates = in.shadow_position.xyz / in.shadow_position.w;
+    // Convert from [-1, 1] to texture coordinates [0, 1].
     let shadow_uv = vec2<f32>(
-        shadow_ndc.x * 0.5 + 0.5,
-        -shadow_ndc.y * 0.5 + 0.5
+        shadow_coordinates.x * 0.5 + 0.5,
+        -shadow_coordinates.y * 0.5 + 0.5
     );
     let shadow = textureSampleCompare(
         shadow_map,
         shadow_sampler,
         shadow_uv,
-        shadow_ndc.z - 0.005
+        shadow_coordinates.z - 0.005
     );
 
-    let lighting = light.ambient + diffuse * shadow;
+    // Add ambient to prevent lighting being 0
+    let lighting = light.ambient + (diffuse * shadow);
+
     let lit_colour = colour.rgb * lighting;
     return vec4<f32>(lit_colour, colour.a);
 }
