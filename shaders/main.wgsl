@@ -38,17 +38,17 @@ var<uniform> light: Light;
 @group(1) @binding(1)
 var<uniform> light_view_projection: mat4x4<f32>;
 @group(1) @binding(2)
-var shadow_map: texture_depth_2d;
+var shadow_t: texture_depth_2d;
 @group(1) @binding(3)
-var shadow_sampler: sampler_comparison;
+var shadow_s: sampler_comparison;
 
 
 @group(2) @binding(0)
 var<uniform> material: Material;
 @group(2) @binding(1)
-var texture: texture_2d<f32>;
+var material_t: texture_2d<f32>;
 @group(2) @binding(2)
-var texture_sampler: sampler;
+var material_s: sampler;
 
 @group(3) @binding(0)
 var<storage, read> transforms: array<Transform>;
@@ -74,7 +74,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var colour = material.base_colour;
 
     if material.has_texture == 1 {
-        colour *= textureSample(texture, texture_sampler, in.uv);
+        colour *= textureSample(material_t, material_s, in.uv);
     }
 
     // Lighting
@@ -91,8 +91,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         -shadow_coordinates.y * 0.5 + 0.5
     );
     let shadow = textureSampleCompare(
-        shadow_map,
-        shadow_sampler,
+        shadow_t,
+        shadow_s,
         shadow_uv,
         shadow_coordinates.z - 0.005
     );

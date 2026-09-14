@@ -247,22 +247,22 @@ impl Game {
         });
 
         let light = Light::new(
-            Vec3::new(1.0, -1.0, 0.0),
+            Vec3::new(1.0, -1.0, -1.0),
             Vec3::new(1.0, 1.0, 1.0),
-            0.7,
+            0.8,
             0.1,
         );
 
         let player = Entity::new(
             ModelId::Foo,
             Vec3::ZERO,
-            Vec3::splat(0.3),
+            Vec3::splat(0.5),
             BoundingBox::new(assets.get(ModelId::Foo)),
         );
 
         let platform = Object::new(
             ModelId::Platform,
-            Vec3::splat(2.0),
+            Vec3::Y * 2.0,
             Vec3::ONE,
             BoundingBox::new(assets.get(ModelId::Platform)),
         );
@@ -271,7 +271,7 @@ impl Game {
         let objects = vec![platform];
 
         let ground_asset = assets.get(ModelId::Ground);
-        let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(30.0), ground_asset);
+        let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(40.0), ground_asset);
         Self {
             entities,
             terrain,
