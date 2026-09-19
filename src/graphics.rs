@@ -275,13 +275,28 @@ impl Shadows {
     }
 }
 
+struct TextBuffer {
+    inner: glyphon::Buffer,
+    generation: u32,
+}
+
+impl TextBuffer {
+    fn new(font_system: &mut glyphon::FontSystem) -> Self {
+        let inner = glyphon::Buffer::new(font_system, glyphon::Metrics::new(20.0, 32.0));
+        Self {
+            inner,
+            generation: 0,
+        }
+    }
+}
+
 struct Text {
     renderer: glyphon::TextRenderer,
     atlas: glyphon::TextAtlas,
     viewport: glyphon::Viewport,
     swash_cache: glyphon::SwashCache,
     font_system: glyphon::FontSystem,
-    buffers: Vec<glyphon::Buffer>,
+    buffers: Vec<TextBuffer>,
 }
 
 impl Text {
@@ -306,23 +321,25 @@ impl Text {
 
     fn sync_buffers(&mut self, labels: &Store<Label>) {
         while self.buffers.len() < labels.len() {
-            self.buffers.push(glyphon::Buffer::new(
-                &mut self.font_system,
-                glyphon::Metrics::new(20.0, 32.0),
-            ));
+            self.buffers.push(TextBuffer::new(&mut self.font_system));
         }
     }
 
     fn update(&mut self, labels: &Store<Label>) {
         for (label, buffer) in labels.iter().zip(self.buffers.iter_mut()) {
-            if let Some(label) = label {
-                buffer.set_text(
+            let Some(label) = label else { continue };
+
+            if label.generation() != buffer.generation {
+                buffer.inner.set_text(
                     &label.text,
                     &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
                     glyphon::Shaping::Advanced,
                     None,
                 );
-                buffer.shape_until_scroll(&mut self.font_system, false);
+                buffer
+                    .inner
+                    .shape_until_scroll(&mut self.font_system, false);
+                buffer.generation = label.generation();
             }
         }
     }
@@ -342,7 +359,7 @@ impl Text {
                 .filter_map(move |(buffer, label)| {
                     let label = label.as_ref()?;
                     Some(glyphon::TextArea {
-                        buffer,
+                        buffer: &buffer.inner,
                         left: label.position.x,
                         top: label.position.y,
                         scale: 1.0,

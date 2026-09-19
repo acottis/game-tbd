@@ -68,6 +68,10 @@ impl<T> Store<T> {
         self.slots.iter()
     }
 
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<T>> {
+        self.slots.iter_mut()
+    }
+
     pub fn len(&self) -> usize {
         self.slots.len()
     }

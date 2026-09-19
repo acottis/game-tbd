@@ -357,7 +357,11 @@ impl Game {
     }
 
     pub fn update(&mut self, delta_time: f32) {
-        self.labels.get_mut(self.fps).unwrap().text = format!("FPS: {:.0}", 1.0 / delta_time);
+        self.labels
+            .get_mut(self.fps)
+            .unwrap()
+            .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
+
         for entity in &mut self.entities {
             entity.animate(delta_time);
 

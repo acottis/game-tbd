@@ -4,7 +4,7 @@ pub struct Label {
     pub position: Vec2,
     pub color: glyphon::Color,
     pub text: String,
-    pub dirty: bool,
+    generation: u32,
 }
 
 impl Label {
@@ -13,7 +13,17 @@ impl Label {
             position,
             color,
             text: text.into(),
-            dirty: true,
+            // Start at one so we immediately need to draw
+            generation: 1,
         }
+    }
+
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.text = text.into();
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    pub fn generation(&self) -> u32 {
+        self.generation
     }
 }
