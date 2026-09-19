@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use glam::{Mat3, Mat4, Vec3};
 
 use crate::assets::AssetModel;
@@ -55,9 +57,11 @@ impl BoundingBox {
         let seperation_time = exit_time.x.min(exit_time.y).min(exit_time.z);
 
         let axes_never_collide_simultaneously = collision_time > seperation_time;
+        // We have not reached the collision yet
         let collision_is_after_movement_ends = collision_time > 1.0;
-        // TODO: Not sure if this is possible
-        let collision_ended_before_movement_starts = seperation_time < 0.0;
+        // If we are inside the collision before we start moving it has
+        // "already happened"
+        let collision_ended_before_movement_starts = collision_time < 0.0;
 
         if axes_never_collide_simultaneously
             || collision_is_after_movement_ends
@@ -107,8 +111,26 @@ impl BoundingBox {
     }
 }
 
+#[derive(Eq, Hash, PartialEq)]
+struct CellCoord {
+    x: i32,
+    z: i32,
+}
+
+impl CellCoord {
+    const SIZE: f32 = 8.0;
+
+    fn from_position(position: Vec3) -> Self {
+        Self {
+            x: (position.x / Self::SIZE).floor() as i32,
+            z: (position.z / Self::SIZE).floor() as i32,
+        }
+    }
+}
+
 pub struct GroundCollision {
     triangles: Vec<[Vec3; 3]>,
+    grid: HashMap<CellCoord, Vec<usize>>,
 }
 
 impl GroundCollision {
@@ -135,13 +157,35 @@ impl GroundCollision {
             }
         }
 
-        Self { triangles }
+        let mut grid: HashMap<CellCoord, Vec<usize>> = HashMap::new();
+
+        for (index, triangle) in triangles.iter().enumerate() {
+            let min_x = triangle[0].x.min(triangle[1].x).min(triangle[2].x);
+            let max_x = triangle[0].x.max(triangle[1].x).max(triangle[2].x);
+            let min_z = triangle[0].z.min(triangle[1].z).min(triangle[2].z);
+            let max_z = triangle[0].z.max(triangle[1].z).max(triangle[2].z);
+
+            let min_cell = CellCoord::from_position(Vec3::new(min_x, 0.0, min_z));
+            let max_cell = CellCoord::from_position(Vec3::new(max_x, 0.0, max_z));
+
+            for z in min_cell.z..=max_cell.z {
+                for x in min_cell.x..=max_cell.x {
+                    grid.entry(CellCoord { x, z }).or_default().push(index);
+                }
+            }
+        }
+
+        Self { triangles, grid }
     }
 
     pub fn height_at(&self, point: Vec3) -> Option<f32> {
-        self.triangles
+        let cell = CellCoord::from_position(point);
+
+        let triangles = self.grid.get(&cell)?;
+
+        triangles
             .iter()
-            .filter_map(|triangle| triangle_height(*triangle, point))
+            .filter_map(|&index| triangle_height(self.triangles[index], point))
             .max_by(f32::total_cmp)
     }
 }

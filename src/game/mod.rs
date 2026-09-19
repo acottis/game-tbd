@@ -106,6 +106,7 @@ impl Entity {
     fn check_terrain_collision(&mut self, terrain: &GroundCollision) {
         // None means OOB
         let Some(height) = terrain.height_at(self.position) else {
+            log::warn!("You are out of bounds!");
             return;
         };
 
@@ -145,33 +146,38 @@ impl Entity {
         transform(self.position, self.rotation, self.scale)
     }
 
-    fn move_and_collide(&mut self, delta_time: f32, ground: &GroundCollision, objects: &[Object]) {
+    pub fn move_and_collide(
+        &mut self,
+        delta_time: f32,
+        terrain: &GroundCollision,
+        objects: &[Object],
+    ) {
         self.apply_gravity(delta_time);
-
         let movement = self.velocity * delta_time;
         let bounds = self.bounds();
-
+        self.position += movement;
         for object in objects {
-            if let Some((time, normal)) = bounds.sweep(movement, &object.bounds()) {
-                // println!("COLLISION time={time}, normal={normal:?}, movement={movement:?}");
-
-                if normal.y == 1.0 && movement.y < 0.0 {
-                    self.ground();
-                }
-                if normal.y != 0.0 {
+            let object_bounds = object.bounds();
+            if let Some((_collision_time, normal)) = bounds.sweep(movement, &object_bounds) {
+                if normal.y > 0.0 && movement.y < 0.0 {
+                    let player_bounds = self.bounds();
+                    self.position.y += object_bounds.max.y - player_bounds.min.y;
                     self.velocity.y = 0.0;
-                }
-                if normal.z != 0.0 {
-                    self.velocity.z = 0.0;
-                }
-                if normal.x != 0.0 {
-                    self.velocity.x = 0.0;
+                    self.ground();
+                } else {
+                    if normal.x != 0.0 {
+                        self.velocity.x = 0.0;
+                    }
+                    if normal.y != 0.0 {
+                        self.velocity.y = 0.0;
+                    }
+                    if normal.z != 0.0 {
+                        self.velocity.z = 0.0;
+                    }
                 }
             }
         }
-
-        self.position += self.velocity * delta_time;
-        self.check_terrain_collision(ground);
+        self.check_terrain_collision(&terrain);
     }
 }
 
