@@ -84,17 +84,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse = light.colour * diffuse_strength * light.intensity;
 
     // Shadows
-    let shadow_coordinates = in.shadow_position.xyz / in.shadow_position.w;
+    let shadow_ndc = in.shadow_position.xyz / in.shadow_position.w;
     // Convert from [-1, 1] to texture coordinates [0, 1].
     let shadow_uv = vec2<f32>(
-        shadow_coordinates.x * 0.5 + 0.5,
-        -shadow_coordinates.y * 0.5 + 0.5
+        shadow_ndc.x * 0.5 + 0.5,
+        -shadow_ndc.y * 0.5 + 0.5
     );
     let shadow = textureSampleCompare(
         shadow_t,
         shadow_s,
         shadow_uv,
-        shadow_coordinates.z - 0.005
+        shadow_ndc.z - 0.00005
     );
 
     // Add ambient to prevent lighting being 0

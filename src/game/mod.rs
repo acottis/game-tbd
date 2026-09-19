@@ -256,7 +256,7 @@ impl Game {
         let player = Entity::new(
             ModelId::Foo,
             Vec3::ZERO,
-            Vec3::splat(0.5),
+            Vec3::splat(0.3),
             BoundingBox::new(assets.get(ModelId::Foo)),
         );
 
