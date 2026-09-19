@@ -10,15 +10,14 @@ use winit::{
 };
 
 mod assets;
+mod engine;
 mod game;
 mod graphics;
 
-use graphics::State;
-
-use crate::assets::AssetModelSet;
+use crate::{assets::AssetModelSet, engine::Engine};
 
 struct App {
-    state: Option<State>,
+    state: Option<Engine>,
     game: Game,
     assets: AssetModelSet,
     last_frame_time: Instant,
@@ -38,7 +37,7 @@ impl App {
     }
 
     fn init(&mut self, window: Window) {
-        self.state = Some(State::new(window, &self.assets.0));
+        self.state = Some(Engine::new(window, &self.assets.0));
     }
 
     #[inline(always)]

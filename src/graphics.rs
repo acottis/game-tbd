@@ -162,7 +162,7 @@ impl Shadows {
             bind_group_layouts: &[Some(&camera_layout), Some(&transforms_layout)],
             immediate_size: 0,
         });
-        let shader = device.create_shader_module(include_wgsl!("../../shaders/shadow.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("../shaders/shadow.wgsl"));
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Shadow Pipeline"),
             layout: Some(&pipeline_layout),
@@ -274,6 +274,108 @@ impl Shadows {
     }
 }
 
+struct Text {
+    renderer: glyphon::TextRenderer,
+    atlas: glyphon::TextAtlas,
+    viewport: glyphon::Viewport,
+    swash_cache: glyphon::SwashCache,
+    font_system: glyphon::FontSystem,
+    buffers: Vec<glyphon::Buffer>,
+}
+
+impl Text {
+    fn new(device: &Device, queue: &Queue, texture_format: TextureFormat) -> Self {
+        let font_system = glyphon::FontSystem::new();
+        let swash_cache = glyphon::SwashCache::new();
+        let cache = glyphon::Cache::new(&device);
+        let viewport = glyphon::Viewport::new(&device, &cache);
+        let mut atlas = glyphon::TextAtlas::new(&device, &queue, &cache, texture_format);
+        let renderer =
+            glyphon::TextRenderer::new(&mut atlas, &device, MultisampleState::default(), None);
+
+        Self {
+            renderer,
+            atlas,
+            viewport,
+            swash_cache,
+            font_system,
+            buffers: Vec::new(),
+        }
+    }
+
+    fn add_buffer(&mut self) {
+        let mut buffer =
+            glyphon::Buffer::new(&mut self.font_system, glyphon::Metrics::new(20.0, 32.0));
+        buffer.set_text(
+            "fooooooooooooooooooooooooooooooooooooooooO",
+            &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
+            glyphon::Shaping::Advanced,
+            None,
+        );
+        buffer.shape_until_scroll(&mut self.font_system, false);
+        self.buffers.push(buffer)
+    }
+
+    fn prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        width: u32,
+        height: u32,
+        labels: &[crate::game::text::Label],
+    ) {
+        let text_areas = self
+            .buffers
+            .iter_mut()
+            .zip(labels.iter())
+            .map(move |(buffer, label)| glyphon::TextArea {
+                buffer,
+                left: label.position.x,
+                top: label.position.y,
+                scale: 1.0,
+                bounds: glyphon::TextBounds {
+                    left: 0,
+                    top: 0,
+                    right: width as i32,
+                    bottom: height as i32,
+                },
+                default_color: label.color,
+                custom_glyphs: &[],
+            });
+
+        self.renderer
+            .prepare(
+                device,
+                queue,
+                &mut self.font_system,
+                &mut self.atlas,
+                &self.viewport,
+                text_areas,
+                &mut self.swash_cache,
+            )
+            .unwrap();
+    }
+
+    fn render_pass_descriptor<'tex>(
+        &self,
+        color_attachments: &'tex [Option<RenderPassColorAttachment<'tex>>],
+    ) -> RenderPassDescriptor<'tex> {
+        RenderPassDescriptor {
+            label: Some("Glyphon"),
+            color_attachments,
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        }
+    }
+
+    fn resize(&mut self, queue: &Queue, width: u32, height: u32) {
+        self.viewport
+            .update(&queue, glyphon::Resolution { width, height });
+    }
+}
+
 pub struct Gpu {
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
@@ -289,6 +391,7 @@ pub struct Gpu {
     material_layout: BindGroupLayout,
 
     lighting: Lighting,
+    text: Text,
 }
 
 impl Gpu {
@@ -303,6 +406,10 @@ impl Gpu {
             .get_default_config(&adapter, window_size.width, window_size.height)
             .unwrap();
         surface.configure(&device, &surface_config);
+
+        let mut text = Text::new(&device, &queue, surface_config.format);
+        text.resize(&queue, window_size.width, window_size.height);
+        text.add_buffer();
 
         let camera_layout = GpuTransform::layout(&device, Some("Camera"));
         let camera = GpuTransform::new(&device, &camera_layout, Some("Camera"));
@@ -323,7 +430,7 @@ impl Gpu {
             ],
             immediate_size: 0,
         });
-        let shader = device.create_shader_module(include_wgsl!("../../shaders/main.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("../shaders/main.wgsl"));
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
@@ -377,6 +484,7 @@ impl Gpu {
             transforms,
             transforms_layout,
             lighting,
+            text,
         }
     }
 
@@ -384,7 +492,10 @@ impl Gpu {
         self.surface_config.height = size.height;
         self.surface_config.width = size.width;
         self.surface.configure(&self.device, &self.surface_config);
+
         self.depth_view = create_depth_view(&self.device, size);
+
+        self.text.resize(&self.queue, size.width, size.height);
     }
 
     fn render_pass_descriptor<'tex>(
@@ -432,7 +543,7 @@ impl Gpu {
         self.queue
             .write_buffer(&self.lighting.buffer, 0, bytes_of(&game.light));
 
-        // Transform the models
+        // Transform the models to their wold coordinates
         self.transforms.write(
             &self.device,
             &self.queue,
@@ -441,9 +552,16 @@ impl Gpu {
             asset_models,
         );
 
-        let shadow_pass_desc = self.lighting.shadows.render_pass_descriptor();
+        self.text.prepare(
+            &self.device,
+            &self.queue,
+            self.surface_config.width,
+            self.surface_config.height,
+            &game.labels,
+        );
 
         let view = &frame.texture.create_view(&Default::default());
+
         let color_attachments = [Some(RenderPassColorAttachment {
             view,
             resolve_target: None,
@@ -453,13 +571,22 @@ impl Gpu {
             },
             depth_slice: None,
         })];
-        let render_pass_desc = self.render_pass_descriptor(&color_attachments);
+        let text_color_attachments = [Some(RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: Operations {
+                load: LoadOp::Load,
+                store: StoreOp::Store,
+            },
+            depth_slice: None,
+        })];
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
         // Shadow pass
         {
-            let mut shadow_pass = encoder.begin_render_pass(&shadow_pass_desc);
+            let mut shadow_pass =
+                encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
             shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
             shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
             shadow_pass.set_bind_group(1, &self.transforms.bind_group, &[]);
@@ -481,7 +608,8 @@ impl Gpu {
         }
         // Render the models/light
         {
-            let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
+            let mut render_pass =
+                encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
             render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
@@ -502,7 +630,16 @@ impl Gpu {
                 .get(game.terrain.model)
                 .draw(&mut render_pass, transform_index);
         }
+        // Render 2D text
+        {
+            let mut render_pass = encoder
+                .begin_render_pass(&self.text.render_pass_descriptor(&text_color_attachments));
 
+            self.text
+                .renderer
+                .render(&self.text.atlas, &self.text.viewport, &mut render_pass)
+                .unwrap();
+        }
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
         self.queue.present(frame);

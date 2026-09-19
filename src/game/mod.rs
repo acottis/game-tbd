@@ -1,7 +1,8 @@
 use std::f32::consts::PI;
 
-use glam::{Mat4, Quat, Vec3};
+use glam::{Mat4, Quat, Vec2, Vec3};
 
+use glyphon::Color;
 use physics::GRAVITY;
 use winit::keyboard::KeyCode;
 
@@ -13,6 +14,7 @@ use crate::{
         input::Input,
         light::Light,
         physics::{BoundingBox, GroundCollision},
+        text::Label,
     },
 };
 
@@ -21,6 +23,7 @@ mod camera;
 pub mod input;
 pub mod light;
 mod physics;
+pub mod text;
 
 #[inline(always)]
 fn transform(position: Vec3, rotation: Quat, scale: Vec3) -> Mat4 {
@@ -236,6 +239,7 @@ pub struct Game {
     pub camera: Camera,
     pub light: Light,
     pub input: Input,
+    pub labels: Vec<Label>,
 }
 
 impl Game {
@@ -272,6 +276,12 @@ impl Game {
 
         let ground_asset = assets.get(ModelId::Ground);
         let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(40.0), ground_asset);
+
+        let labels = vec![Label::new(
+            Vec2::ONE,
+            Color::rgb(255, 255, 255),
+            "hiasdasfjhsakjghsakgjshdlgksjhdglsdghsidlguhsdligushdgilusghdsiughdu",
+        )];
         Self {
             entities,
             terrain,
@@ -279,6 +289,7 @@ impl Game {
             light,
             input,
             objects,
+            labels,
         }
     }
 

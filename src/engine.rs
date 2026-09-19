@@ -1,25 +1,27 @@
 use std::sync::Arc;
 
-use gpu::Gpu;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::assets::{AssetModel, AssetModelSet};
 use crate::game::Game;
-use crate::graphics::gpu::ModelSet;
+use crate::graphics::{Gpu, ModelSet};
 
-mod gpu;
-pub use gpu::Vertex;
+pub struct Handle {
+    generation: u32,
+    index: usize,
+}
 
-pub struct State {
+pub struct Engine {
     pub window: Arc<Window>,
     pub gpu: Gpu,
     pub models: ModelSet,
 }
 
-impl State {
+impl Engine {
     pub fn new(window: Window, assets: &[AssetModel]) -> Self {
         let window = Arc::new(window);
-        let gpu = Gpu::new(window.clone());
+        let mut gpu = Gpu::new(window.clone());
+        gpu.resize(window.inner_size());
 
         let models = ModelSet::load(&gpu, &assets);
 
