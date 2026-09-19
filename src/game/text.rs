@@ -4,6 +4,7 @@ pub struct Label {
     pub position: Vec2,
     pub color: glyphon::Color,
     pub text: String,
+    pub dirty: bool,
 }
 
 impl Label {
@@ -12,6 +13,7 @@ impl Label {
             position,
             color,
             text: text.into(),
+            dirty: true,
         }
     }
 }

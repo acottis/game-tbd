@@ -8,6 +8,7 @@ use winit::keyboard::KeyCode;
 
 use crate::{
     assets::{AssetModel, AssetModelSet, ModelId},
+    engine::{Handle, Store},
     game::{
         animation::AnimationId,
         camera::Camera,
@@ -239,7 +240,8 @@ pub struct Game {
     pub camera: Camera,
     pub light: Light,
     pub input: Input,
-    pub labels: Vec<Label>,
+    pub labels: Store<Label>,
+    fps: Handle<Label>,
 }
 
 impl Game {
@@ -277,11 +279,17 @@ impl Game {
         let ground_asset = assets.get(ModelId::Ground);
         let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(40.0), ground_asset);
 
-        let labels = vec![Label::new(
-            Vec2::ONE,
+        let mut labels = Store::new();
+        labels.create(Label::new(
+            Vec2::new(0.0, 0.0),
             Color::rgb(255, 255, 255),
-            "hiasdasfjhsakjghsakgjshdlgksjhdglsdghsidlguhsdligushdgilusghdsiughdu",
-        )];
+            "Foo Text 🦀",
+        ));
+        let fps = labels.create(Label::new(
+            Vec2::new(650.0, 0.0),
+            Color::rgb(255, 255, 255),
+            "FPS: 0.0",
+        ));
         Self {
             entities,
             terrain,
@@ -290,6 +298,7 @@ impl Game {
             input,
             objects,
             labels,
+            fps,
         }
     }
 
@@ -300,7 +309,7 @@ impl Game {
         // Movement is relative to camera direction
         let mut movement = Vec3::ZERO;
         if self.input.is_pressed(KeyCode::KeyW) {
-            movement += camera.forward_planar()
+            movement += camera.forward_planar();
         }
         if self.input.is_pressed(KeyCode::KeyS) {
             movement -= camera.forward_planar()
@@ -348,6 +357,7 @@ impl Game {
     }
 
     pub fn update(&mut self, delta_time: f32) {
+        self.labels.get_mut(self.fps).unwrap().text = format!("FPS: {:.0}", 1.0 / delta_time);
         for entity in &mut self.entities {
             entity.animate(delta_time);
 

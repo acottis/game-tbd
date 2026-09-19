@@ -10,7 +10,8 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     assets::{self, AssetModel, AssetModelSet, ModelId},
-    game::{Entity, Game, light::Light},
+    engine::Store,
+    game::{Entity, Game, light::Light, text::Label},
 };
 
 fn animated_transform(entity: &Entity, model: &AssetModel) -> Mat4 {
@@ -303,17 +304,27 @@ impl Text {
         }
     }
 
-    fn add_buffer(&mut self) {
-        let mut buffer =
-            glyphon::Buffer::new(&mut self.font_system, glyphon::Metrics::new(20.0, 32.0));
-        buffer.set_text(
-            "fooooooooooooooooooooooooooooooooooooooooO",
-            &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
-            glyphon::Shaping::Advanced,
-            None,
-        );
-        buffer.shape_until_scroll(&mut self.font_system, false);
-        self.buffers.push(buffer)
+    fn sync_buffers(&mut self, labels: &Store<Label>) {
+        while self.buffers.len() < labels.len() {
+            self.buffers.push(glyphon::Buffer::new(
+                &mut self.font_system,
+                glyphon::Metrics::new(20.0, 32.0),
+            ));
+        }
+    }
+
+    fn update(&mut self, labels: &Store<Label>) {
+        for (label, buffer) in labels.iter().zip(self.buffers.iter_mut()) {
+            if let Some(label) = label {
+                buffer.set_text(
+                    &label.text,
+                    &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
+                    glyphon::Shaping::Advanced,
+                    None,
+                );
+                buffer.shape_until_scroll(&mut self.font_system, false);
+            }
+        }
     }
 
     fn prepare(
@@ -322,26 +333,29 @@ impl Text {
         queue: &Queue,
         width: u32,
         height: u32,
-        labels: &[crate::game::text::Label],
+        labels: &Store<Label>,
     ) {
-        let text_areas = self
-            .buffers
-            .iter_mut()
-            .zip(labels.iter())
-            .map(move |(buffer, label)| glyphon::TextArea {
-                buffer,
-                left: label.position.x,
-                top: label.position.y,
-                scale: 1.0,
-                bounds: glyphon::TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: width as i32,
-                    bottom: height as i32,
-                },
-                default_color: label.color,
-                custom_glyphs: &[],
-            });
+        let text_areas =
+            self.buffers
+                .iter_mut()
+                .zip(labels.iter())
+                .filter_map(move |(buffer, label)| {
+                    let label = label.as_ref()?;
+                    Some(glyphon::TextArea {
+                        buffer,
+                        left: label.position.x,
+                        top: label.position.y,
+                        scale: 1.0,
+                        bounds: glyphon::TextBounds {
+                            left: 0,
+                            top: 0,
+                            right: width as i32,
+                            bottom: height as i32,
+                        },
+                        default_color: label.color,
+                        custom_glyphs: &[],
+                    })
+                });
 
         self.renderer
             .prepare(
@@ -373,276 +387,6 @@ impl Text {
     fn resize(&mut self, queue: &Queue, width: u32, height: u32) {
         self.viewport
             .update(&queue, glyphon::Resolution { width, height });
-    }
-}
-
-pub struct Gpu {
-    surface: Surface<'static>,
-    surface_config: SurfaceConfiguration,
-    device: Device,
-    queue: Queue,
-
-    render_pipeline: RenderPipeline,
-    depth_view: TextureView,
-
-    camera: GpuTransform,
-    transforms: Transforms,
-    transforms_layout: BindGroupLayout,
-    material_layout: BindGroupLayout,
-
-    lighting: Lighting,
-    text: Text,
-}
-
-impl Gpu {
-    pub fn new(window: Arc<Window>) -> Self {
-        let window_size = window.inner_size();
-        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
-        let surface = instance.create_surface(window).unwrap();
-
-        let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
-
-        let surface_config = surface
-            .get_default_config(&adapter, window_size.width, window_size.height)
-            .unwrap();
-        surface.configure(&device, &surface_config);
-
-        let mut text = Text::new(&device, &queue, surface_config.format);
-        text.resize(&queue, window_size.width, window_size.height);
-        text.add_buffer();
-
-        let camera_layout = GpuTransform::layout(&device, Some("Camera"));
-        let camera = GpuTransform::new(&device, &camera_layout, Some("Camera"));
-
-        let transforms_layout = Transforms::layout(&device);
-        let transforms = Transforms::new(&device, &transforms_layout, 64);
-
-        let lighting = Lighting::new(&device, &transforms_layout);
-        let material_layout = Material::layout(&device);
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &[
-                Some(&camera_layout),
-                Some(&lighting.layout),
-                Some(&material_layout),
-                Some(&transforms_layout),
-            ],
-            immediate_size: 0,
-        });
-        let shader = device.create_shader_module(include_wgsl!("../shaders/main.wgsl"));
-        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: None,
-                compilation_options: Default::default(),
-                buffers: &[Some(Vertex::layout())],
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: None,
-                compilation_options: Default::default(),
-                targets: &[Some(surface_config.format.into())],
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: FrontFace::Ccw,
-                // Dont render the back of the triangle
-                cull_mode: Some(Face::Back),
-                unclipped_depth: false,
-                polygon_mode: PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(CompareFunction::Less),
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }),
-            multisample: MultisampleState::default(),
-            cache: None,
-            multiview_mask: None,
-        });
-
-        let depth_view = create_depth_view(&device, window_size);
-
-        log::info!("{:#?}", adapter.get_info());
-
-        Self {
-            surface,
-            surface_config,
-            device,
-            queue,
-            render_pipeline,
-            material_layout,
-            depth_view,
-            camera,
-            transforms,
-            transforms_layout,
-            lighting,
-            text,
-        }
-    }
-
-    pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        self.surface_config.height = size.height;
-        self.surface_config.width = size.width;
-        self.surface.configure(&self.device, &self.surface_config);
-
-        self.depth_view = create_depth_view(&self.device, size);
-
-        self.text.resize(&self.queue, size.width, size.height);
-    }
-
-    fn render_pass_descriptor<'tex>(
-        &'tex self,
-        color_attachments: &'tex [Option<RenderPassColorAttachment<'tex>>],
-    ) -> RenderPassDescriptor<'tex> {
-        RenderPassDescriptor {
-            label: Some("Render"),
-            color_attachments,
-            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &self.depth_view,
-                depth_ops: Some(Operations {
-                    load: LoadOp::Clear(1.0),
-                    store: StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        }
-    }
-
-    pub fn render(
-        &mut self,
-        window: &Window,
-        game: &Game,
-        models: &ModelSet,
-        asset_models: &AssetModelSet,
-    ) {
-        let frame = match self.surface.get_current_texture() {
-            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
-            e => unimplemented!("{e:?}"),
-        };
-
-        self.lighting.shadows.camera.write(
-            &self.queue,
-            &game.light.shadow_transform(game.camera.target()),
-        );
-
-        self.camera
-            .write(&self.queue, &game.camera.view_projection_matrix());
-
-        self.queue
-            .write_buffer(&self.lighting.buffer, 0, bytes_of(&game.light));
-
-        // Transform the models to their wold coordinates
-        self.transforms.write(
-            &self.device,
-            &self.queue,
-            &self.transforms_layout,
-            game,
-            asset_models,
-        );
-
-        self.text.prepare(
-            &self.device,
-            &self.queue,
-            self.surface_config.width,
-            self.surface_config.height,
-            &game.labels,
-        );
-
-        let view = &frame.texture.create_view(&Default::default());
-
-        let color_attachments = [Some(RenderPassColorAttachment {
-            view,
-            resolve_target: None,
-            ops: Operations {
-                load: LoadOp::Clear(Default::default()),
-                store: StoreOp::Store,
-            },
-            depth_slice: None,
-        })];
-        let text_color_attachments = [Some(RenderPassColorAttachment {
-            view,
-            resolve_target: None,
-            ops: Operations {
-                load: LoadOp::Load,
-                store: StoreOp::Store,
-            },
-            depth_slice: None,
-        })];
-
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-
-        // Shadow pass
-        {
-            let mut shadow_pass =
-                encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
-            shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
-            shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
-            shadow_pass.set_bind_group(1, &self.transforms.bind_group, &[]);
-
-            let transform_index = &mut 0;
-            for entity in &game.entities {
-                models
-                    .get(entity.model)
-                    .draw_shadow(&mut shadow_pass, transform_index);
-            }
-            for object in &game.objects {
-                models
-                    .get(object.model)
-                    .draw_shadow(&mut shadow_pass, transform_index);
-            }
-            models
-                .get(game.terrain.model)
-                .draw(&mut shadow_pass, transform_index);
-        }
-        // Render the models/light
-        {
-            let mut render_pass =
-                encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
-            render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
-            render_pass.set_bind_group(3, &self.transforms.bind_group, &[]);
-
-            let transform_index = &mut 0;
-            for entity in &game.entities {
-                models
-                    .get(entity.model)
-                    .draw(&mut render_pass, transform_index);
-            }
-            for object in &game.objects {
-                models
-                    .get(object.model)
-                    .draw(&mut render_pass, transform_index);
-            }
-            models
-                .get(game.terrain.model)
-                .draw(&mut render_pass, transform_index);
-        }
-        // Render 2D text
-        {
-            let mut render_pass = encoder
-                .begin_render_pass(&self.text.render_pass_descriptor(&text_color_attachments));
-
-            self.text
-                .renderer
-                .render(&self.text.atlas, &self.text.viewport, &mut render_pass)
-                .unwrap();
-        }
-        self.queue.submit([encoder.finish()]);
-        window.pre_present_notify();
-        self.queue.present(frame);
     }
 }
 
@@ -1108,5 +852,276 @@ impl Vertex {
             step_mode: VertexStepMode::Vertex,
             attributes: &Self::ATTRIBUTES,
         }
+    }
+}
+
+pub struct Gpu {
+    surface: Surface<'static>,
+    surface_config: SurfaceConfiguration,
+    device: Device,
+    queue: Queue,
+
+    render_pipeline: RenderPipeline,
+    depth_view: TextureView,
+
+    camera: GpuTransform,
+    transforms: Transforms,
+    transforms_layout: BindGroupLayout,
+    material_layout: BindGroupLayout,
+
+    lighting: Lighting,
+    text: Text,
+}
+
+impl Gpu {
+    pub fn new(window: Arc<Window>) -> Self {
+        let window_size = window.inner_size();
+        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
+        let surface = instance.create_surface(window).unwrap();
+
+        let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
+
+        let surface_config = surface
+            .get_default_config(&adapter, window_size.width, window_size.height)
+            .unwrap();
+        surface.configure(&device, &surface_config);
+
+        let mut text = Text::new(&device, &queue, surface_config.format);
+        text.resize(&queue, window_size.width, window_size.height);
+
+        let camera_layout = GpuTransform::layout(&device, Some("Camera"));
+        let camera = GpuTransform::new(&device, &camera_layout, Some("Camera"));
+
+        let transforms_layout = Transforms::layout(&device);
+        let transforms = Transforms::new(&device, &transforms_layout, 64);
+
+        let lighting = Lighting::new(&device, &transforms_layout);
+        let material_layout = Material::layout(&device);
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[
+                Some(&camera_layout),
+                Some(&lighting.layout),
+                Some(&material_layout),
+                Some(&transforms_layout),
+            ],
+            immediate_size: 0,
+        });
+        let shader = device.create_shader_module(include_wgsl!("../shaders/main.wgsl"));
+        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                buffers: &[Some(Vertex::layout())],
+            },
+            fragment: Some(FragmentState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                targets: &[Some(surface_config.format.into())],
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                // Dont render the back of the triangle
+                cull_mode: Some(Face::Back),
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(CompareFunction::Less),
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
+            multisample: MultisampleState::default(),
+            cache: None,
+            multiview_mask: None,
+        });
+
+        let depth_view = create_depth_view(&device, window_size);
+
+        log::info!("{:#?}", adapter.get_info());
+
+        Self {
+            surface,
+            surface_config,
+            device,
+            queue,
+            render_pipeline,
+            material_layout,
+            depth_view,
+            camera,
+            transforms,
+            transforms_layout,
+            lighting,
+            text,
+        }
+    }
+
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        self.surface_config.height = size.height;
+        self.surface_config.width = size.width;
+        self.surface.configure(&self.device, &self.surface_config);
+
+        self.depth_view = create_depth_view(&self.device, size);
+
+        self.text.resize(&self.queue, size.width, size.height);
+    }
+
+    fn render_pass_descriptor<'tex>(
+        &'tex self,
+        color_attachments: &'tex [Option<RenderPassColorAttachment<'tex>>],
+    ) -> RenderPassDescriptor<'tex> {
+        RenderPassDescriptor {
+            label: Some("Render"),
+            color_attachments,
+            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                view: &self.depth_view,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(1.0),
+                    store: StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        }
+    }
+
+    pub fn render(
+        &mut self,
+        window: &Window,
+        game: &Game,
+        models: &ModelSet,
+        asset_models: &AssetModelSet,
+    ) {
+        let frame = match self.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+            e => unimplemented!("{e:?}"),
+        };
+
+        self.lighting.shadows.camera.write(
+            &self.queue,
+            &game.light.shadow_transform(game.camera.target()),
+        );
+
+        self.camera
+            .write(&self.queue, &game.camera.view_projection_matrix());
+
+        self.queue
+            .write_buffer(&self.lighting.buffer, 0, bytes_of(&game.light));
+
+        // Transform the models to their wold coordinates
+        self.transforms.write(
+            &self.device,
+            &self.queue,
+            &self.transforms_layout,
+            game,
+            asset_models,
+        );
+
+        self.text.sync_buffers(&game.labels);
+        self.text.update(&game.labels);
+        self.text.prepare(
+            &self.device,
+            &self.queue,
+            self.surface_config.width,
+            self.surface_config.height,
+            &game.labels,
+        );
+
+        let view = &frame.texture.create_view(&Default::default());
+
+        let color_attachments = [Some(RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: Operations {
+                load: LoadOp::Clear(Default::default()),
+                store: StoreOp::Store,
+            },
+            depth_slice: None,
+        })];
+        let text_color_attachments = [Some(RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: Operations {
+                load: LoadOp::Load,
+                store: StoreOp::Store,
+            },
+            depth_slice: None,
+        })];
+
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+
+        // Shadow pass
+        {
+            let mut shadow_pass =
+                encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
+            shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
+            shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
+            shadow_pass.set_bind_group(1, &self.transforms.bind_group, &[]);
+
+            let transform_index = &mut 0;
+            for entity in &game.entities {
+                models
+                    .get(entity.model)
+                    .draw_shadow(&mut shadow_pass, transform_index);
+            }
+            for object in &game.objects {
+                models
+                    .get(object.model)
+                    .draw_shadow(&mut shadow_pass, transform_index);
+            }
+            models
+                .get(game.terrain.model)
+                .draw(&mut shadow_pass, transform_index);
+        }
+        // Render the models/light
+        {
+            let mut render_pass =
+                encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
+            render_pass.set_bind_group(3, &self.transforms.bind_group, &[]);
+
+            let transform_index = &mut 0;
+            for entity in &game.entities {
+                models
+                    .get(entity.model)
+                    .draw(&mut render_pass, transform_index);
+            }
+            for object in &game.objects {
+                models
+                    .get(object.model)
+                    .draw(&mut render_pass, transform_index);
+            }
+            models
+                .get(game.terrain.model)
+                .draw(&mut render_pass, transform_index);
+        }
+        // Render 2D text
+        {
+            let mut render_pass = encoder
+                .begin_render_pass(&self.text.render_pass_descriptor(&text_color_attachments));
+
+            self.text
+                .renderer
+                .render(&self.text.atlas, &self.text.viewport, &mut render_pass)
+                .unwrap();
+        }
+        self.queue.submit([encoder.finish()]);
+        window.pre_present_notify();
+        self.queue.present(frame);
     }
 }

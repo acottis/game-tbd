@@ -6,9 +6,71 @@ use crate::assets::{AssetModel, AssetModelSet};
 use crate::game::Game;
 use crate::graphics::{Gpu, ModelSet};
 
-pub struct Handle {
-    generation: u32,
-    index: usize,
+#[derive(Debug)]
+pub struct Handle<T> {
+    index: u32,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> Copy for Handle<T> {}
+impl<T> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Handle<T> {
+    fn new(index: u32) -> Self {
+        Self {
+            index,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+pub struct Store<T> {
+    slots: Vec<Option<T>>,
+    free: Vec<u32>,
+}
+
+impl<T> Store<T> {
+    pub fn new() -> Self {
+        Self {
+            slots: Vec::new(),
+            free: Vec::new(),
+        }
+    }
+
+    pub fn create(&mut self, data: T) -> Handle<T> {
+        if let Some(free) = self.free.pop() {
+            self.slots[free as usize] = Some(data);
+            return Handle::new(free);
+        }
+        let id = self.slots.len();
+        self.slots.push(Some(data));
+        return Handle::new(id as u32);
+    }
+
+    pub fn get(&self, handle: Handle<T>) -> Option<&T> {
+        self.slots[handle.index as usize].as_ref()
+    }
+
+    pub fn get_mut(&mut self, handle: Handle<T>) -> Option<&mut T> {
+        self.slots[handle.index as usize].as_mut()
+    }
+
+    pub fn remove(&mut self, handle: Handle<T>) {
+        self.slots[handle.index as usize] = None;
+        self.free.push(handle.index);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Option<T>> {
+        self.slots.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.slots.len()
+    }
 }
 
 pub struct Engine {
