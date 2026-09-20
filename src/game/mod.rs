@@ -168,13 +168,11 @@ impl Entity {
                     self.ground();
                 }
                 // Moving into object from below
-                if normal.y == -1.0 {
+                else if normal.y == -1.0 {
                     self.velocity.y = 0.0;
-                }
-                if normal.z != 0.0 {
+                } else if normal.z != 0.0 {
                     self.velocity.z = 0.0;
-                }
-                if normal.x != 0.0 {
+                } else if normal.x != 0.0 {
                     self.velocity.x = 0.0;
                 }
             }
