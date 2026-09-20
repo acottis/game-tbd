@@ -141,7 +141,7 @@ impl Shadows {
     const RESOLUTION: u32 = 8192;
 
     fn new(device: &Device, transforms_layout: &BindGroupLayout) -> Self {
-        let camera_layout = GpuTransform::layout(&device, Some("Camera"));
+        let camera_layout = GpuTransform::layout(&device, ShaderStages::VERTEX, Some("Camera"));
         let camera = GpuTransform::new(&device, &camera_layout, Some("Shadow camera"));
 
         let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -454,12 +454,12 @@ impl GpuTransform {
         queue.write_buffer(&self.buffer, 0, bytes_of(transform));
     }
 
-    fn layout(device: &Device, label: Option<&str>) -> BindGroupLayout {
+    fn layout(device: &Device, visibility: ShaderStages, label: Option<&str>) -> BindGroupLayout {
         device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label,
             entries: &[BindGroupLayoutEntry {
                 binding: 0,
-                visibility: ShaderStages::VERTEX,
+                visibility,
                 count: None,
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
@@ -884,11 +884,75 @@ struct Camera {
 
 impl Camera {
     fn new(device: &Device) -> Self {
-        let layout = GpuTransform::layout(&device, Some("Camera"));
+        let layout = GpuTransform::layout(&device, ShaderStages::VERTEX, Some("Camera"));
         Self {
             transform: GpuTransform::new(&device, &layout, Some("Camera")),
             layout,
         }
+    }
+}
+
+struct Sky {
+    pipeline: RenderPipeline,
+    camera: GpuTransform,
+}
+
+impl Sky {
+    fn new(device: &Device, surface_config: &SurfaceConfiguration) -> Self {
+        let label = Some("SkyBox");
+
+        let camera_layout = GpuTransform::layout(
+            &device,
+            ShaderStages::VERTEX_FRAGMENT,
+            Some("Skybox Camera"),
+        );
+        let camera = GpuTransform::new(&device, &camera_layout, Some("Skybox Camera"));
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label,
+            bind_group_layouts: &[Some(&camera_layout)],
+            immediate_size: 0,
+        });
+        let shader = device.create_shader_module(include_wgsl!("../shaders/sky.wgsl"));
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label,
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            fragment: Some(FragmentState {
+                module: &shader,
+                entry_point: None,
+                compilation_options: Default::default(),
+                targets: &[Some(surface_config.format.into())],
+            }),
+            primitive: Default::default(),
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(CompareFunction::LessEqual),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: Default::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        Self { pipeline, camera }
+    }
+
+    fn render(&self, render_pass: &mut RenderPass) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+        render_pass.draw(0..3, 0..1);
+    }
+
+    fn prepare(&mut self, queue: &Queue, game: &Game) {
+        self.camera
+            .write(queue, &game.camera.sky_inverse_view_projection_matrix());
     }
 }
 
@@ -903,10 +967,11 @@ pub struct Gpu {
 
     camera: Camera,
     transforms: ModelTransforms,
-    material_layout: BindGroupLayout,
-
     lighting: Lighting,
+    sky: Sky,
     text: Text,
+
+    material_layout: BindGroupLayout,
 }
 
 impl Gpu {
@@ -926,6 +991,7 @@ impl Gpu {
         text.resize(&queue, window_size.width, window_size.height);
 
         let camera = Camera::new(&device);
+        let sky = Sky::new(&device, &surface_config);
 
         let transforms = ModelTransforms::new(&device, 64);
 
@@ -996,6 +1062,7 @@ impl Gpu {
             transforms,
             lighting,
             text,
+            sky,
         }
     }
 
@@ -1040,6 +1107,8 @@ impl Gpu {
         self.camera
             .transform
             .write(&self.queue, &game.camera.view_projection_matrix());
+
+        self.sky.prepare(&self.queue, game);
 
         self.lighting.prepare(&self.queue, game);
 
@@ -1123,6 +1192,8 @@ impl Gpu {
             models
                 .get(game.terrain.model)
                 .draw(&mut render_pass, transform_index);
+
+            self.sky.render(&mut render_pass);
 
             self.text
                 .renderer

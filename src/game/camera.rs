@@ -26,13 +26,14 @@ pub struct Camera {
 impl Camera {
     pub const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(0.0, 2.0, -2.0),
+            position: Vec3::new(0.0, 1.75, -3.0),
             target: Vec3::new(0.0, 1.25, 0.0),
             up: Vec3::new(0.0, 1.0, 0.0),
             fovy: PI / 4.0,
             aspect: window_size.width as f32 / window_size.height as f32,
             near: 0.01,
-            far: 100000.0,
+            // TODO: Think about this
+            far: 1000.0,
         }
     }
 
@@ -51,6 +52,7 @@ impl Camera {
         self.position = target + offset;
     }
 
+    #[inline(always)]
     pub fn forward(&self) -> Vec3 {
         (self.target - self.position).normalize_or_zero()
     }
@@ -101,7 +103,23 @@ impl Camera {
     }
 
     pub fn view_projection_matrix(&self) -> Mat4 {
-        proj::directx::perspective(self.fovy, self.aspect, self.near, self.far)
-            * view::look_at_mat4(self.position, self.target, self.up)
+        let projection = proj::directx::perspective(self.fovy, self.aspect, self.near, self.far);
+        let view = view::look_at_mat4(self.position, self.target, self.up);
+        projection * view
+    }
+
+    pub fn sky_inverse_view_projection_matrix(&self) -> Mat4 {
+        let projection = proj::directx::perspective(self.fovy, self.aspect, self.near, self.far);
+
+        // Find the direction the camera is looking.
+        let forward = self.forward();
+
+        // Set eye to origin to stop the sky from moving when the player moves.
+        let view = view::look_at_mat4(Vec3::ZERO, forward, self.up);
+
+        // The shader starts with a screen pixel and needs to work backwards
+        // to find which direction that pixel is looking into the world.
+        // Inverting the matrix lets the shader do that backwards transformation.
+        (projection * view).inverse()
     }
 }
