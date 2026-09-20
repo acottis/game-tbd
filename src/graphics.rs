@@ -2,6 +2,7 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use bytemuck::bytes_of;
 use glam::{Mat4, Vec2, Vec3};
+use glyphon::FontSystem;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt as _},
     *,
@@ -11,7 +12,11 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     assets::{self, AssetModel, AssetModelSet, ModelId},
     engine::Store,
-    game::{Entity, Game, light::Light, text::Label},
+    game::{
+        Entity, Game,
+        light::Light,
+        text::{Anchor, Label},
+    },
 };
 
 fn animated_transform(entity: &Entity, model: &AssetModel) -> Mat4 {
@@ -284,6 +289,7 @@ impl Shadows {
 
 struct TextBuffer {
     inner: glyphon::Buffer,
+    text_width: f32,
     generation: u32,
 }
 
@@ -292,7 +298,27 @@ impl TextBuffer {
         let inner = glyphon::Buffer::new(font_system, glyphon::Metrics::new(20.0, 32.0));
         Self {
             inner,
+            text_width: 0.0,
             generation: 0,
+        }
+    }
+
+    fn update(&mut self, font_system: &mut glyphon::FontSystem, label: &Label) {
+        if label.generation() != self.generation {
+            self.inner.set_text(
+                &label.text,
+                &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
+                glyphon::Shaping::Advanced,
+                None,
+            );
+            self.inner.shape_until_scroll(font_system, false);
+
+            self.text_width = self
+                .inner
+                .layout_runs()
+                .map(|run| run.line_w)
+                .fold(0.0, f32::max);
+            self.generation = label.generation();
         }
     }
 }
@@ -345,19 +371,7 @@ impl Text {
     fn update(&mut self, labels: &Store<Label>) {
         for (label, buffer) in labels.iter().zip(self.buffers.iter_mut()) {
             let Some(label) = label else { continue };
-
-            if label.generation() != buffer.generation {
-                buffer.inner.set_text(
-                    &label.text,
-                    &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
-                    glyphon::Shaping::Advanced,
-                    None,
-                );
-                buffer
-                    .inner
-                    .shape_until_scroll(&mut self.font_system, false);
-                buffer.generation = label.generation();
-            }
+            buffer.update(&mut self.font_system, label);
         }
     }
 
@@ -373,22 +387,9 @@ impl Text {
             self.buffers
                 .iter_mut()
                 .zip(labels.iter())
-                .filter_map(move |(buffer, label)| {
+                .filter_map(|(buffer, label)| {
                     let label = label.as_ref()?;
-                    Some(glyphon::TextArea {
-                        buffer: &buffer.inner,
-                        left: label.position.x,
-                        top: label.position.y,
-                        scale: 1.0,
-                        bounds: glyphon::TextBounds {
-                            left: 0,
-                            top: 0,
-                            right: width as i32,
-                            bottom: height as i32,
-                        },
-                        default_color: label.color,
-                        custom_glyphs: &[],
-                    })
+                    Some(Self::text_area(buffer, label, width, height))
                 });
 
         self.renderer
@@ -407,6 +408,33 @@ impl Text {
     fn resize(&mut self, queue: &Queue, width: u32, height: u32) {
         self.viewport
             .update(&queue, glyphon::Resolution { width, height });
+    }
+
+    fn text_area<'a>(
+        buffer: &'a mut TextBuffer,
+        label: &Label,
+        width: u32,
+        height: u32,
+    ) -> glyphon::TextArea<'a> {
+        let left = match label.anchor {
+            Anchor::Left => label.position.x,
+            Anchor::Right => width as f32 - label.position.x - buffer.text_width,
+        };
+
+        glyphon::TextArea {
+            buffer: &buffer.inner,
+            left,
+            top: label.position.y,
+            scale: 1.0,
+            bounds: glyphon::TextBounds {
+                left: 0,
+                top: 0,
+                right: width as i32,
+                bottom: height as i32,
+            },
+            default_color: label.color,
+            custom_glyphs: &[],
+        }
     }
 }
 

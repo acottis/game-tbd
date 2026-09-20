@@ -15,7 +15,7 @@ use crate::{
         input::Input,
         light::Light,
         physics::{BoundingBox, GroundCollision},
-        text::Label,
+        text::{Anchor, Label},
     },
 };
 
@@ -287,7 +287,7 @@ impl Game {
         let terrain = Terrain::new(
             ModelId::Ground,
             Vec3::ZERO,
-            Vec3::new(200.0, 100.0, 200.0),
+            Vec3::new(200.0, 150.0, 200.0),
             ground_asset,
         );
 
@@ -295,11 +295,13 @@ impl Game {
         labels.create(Label::new(
             Vec2::new(0.0, 0.0),
             Color::rgb(255, 255, 255),
+            Anchor::Left,
             "Foo Text 🦀",
         ));
         let fps = labels.create(Label::new(
-            Vec2::new(650.0, 0.0),
+            Vec2::new(0.0, 0.0),
             Color::rgb(255, 255, 255),
+            Anchor::Right,
             "FPS: 0.0",
         ));
         Self {
