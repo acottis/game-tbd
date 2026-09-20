@@ -121,6 +121,13 @@ impl Lighting {
             bind_group,
         }
     }
+
+    fn prepare(&mut self, queue: &Queue, game: &Game) {
+        queue.write_buffer(&self.buffer, 0, bytes_of(&game.light));
+        self.shadows
+            .camera
+            .write(queue, &game.light.shadow_transform(game.camera.target()));
+    }
 }
 
 struct Shadows {
@@ -498,7 +505,13 @@ impl ModelTransforms {
         }
     }
 
-    fn write(&mut self, device: &Device, queue: &Queue, game: &Game, asset_models: &AssetModelSet) {
+    fn prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        game: &Game,
+        asset_models: &AssetModelSet,
+    ) {
         // TODO: Think about this
         if self.transforms.len() > self.capacity {
             let transforms = std::mem::take(&mut self.transforms);
@@ -1024,21 +1037,15 @@ impl Gpu {
         models: &ModelSet,
         asset_models: &AssetModelSet,
     ) {
-        self.lighting.shadows.camera.write(
-            &self.queue,
-            &game.light.shadow_transform(game.camera.target()),
-        );
-
         self.camera
             .transform
             .write(&self.queue, &game.camera.view_projection_matrix());
 
-        self.queue
-            .write_buffer(&self.lighting.buffer, 0, bytes_of(&game.light));
+        self.lighting.prepare(&self.queue, game);
 
         // Transform the models to their wold coordinates
         self.transforms
-            .write(&self.device, &self.queue, game, asset_models);
+            .prepare(&self.device, &self.queue, game, asset_models);
 
         self.text.sync_buffers(&game.labels);
         self.text.update(&game.labels);
