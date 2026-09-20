@@ -53,7 +53,7 @@ pub struct Entity {
     rotation: Quat,
     scale: Vec3,
     velocity: Vec3,
-    falling: bool,
+    grounded: bool,
     bounding_box: BoundingBox,
     pub animation: Option<Animation>,
     pub model: ModelId,
@@ -66,7 +66,7 @@ impl Entity {
             rotation: Quat::IDENTITY,
             scale,
             velocity: Vec3::ZERO,
-            falling: false,
+            grounded: false,
             animation: None,
             model,
             bounding_box,
@@ -89,12 +89,12 @@ impl Entity {
     }
 
     pub const fn jump(&mut self, velocity: f32) {
-        if self.falling {
+        if !self.grounded {
             return;
         }
 
+        self.grounded = false;
         self.velocity.y = velocity;
-        self.falling = true;
         self.animation = Some(Animation::new(AnimationId::Jump, None));
     }
 
@@ -112,13 +112,13 @@ impl Entity {
 
         if self.velocity.y <= 0.0 && self.bounds().min.y <= height {
             self.position.y += height - self.bounds().min.y;
-            self.velocity.y = 0.0;
             self.ground();
         }
     }
 
     fn ground(&mut self) {
-        self.falling = false;
+        self.velocity.y = 0.0;
+        self.grounded = true;
         self.animation = None;
     }
 
@@ -146,38 +146,41 @@ impl Entity {
         transform(self.position, self.rotation, self.scale)
     }
 
+    // TODO: We don't handle moving into the object before collision kicks in
     pub fn move_and_collide(
         &mut self,
         delta_time: f32,
-        terrain: &GroundCollision,
+        ground: &GroundCollision,
         objects: &[Object],
     ) {
+        // Assume we are not grounded until proven otherwise
+        self.grounded = false;
+
         self.apply_gravity(delta_time);
         let movement = self.velocity * delta_time;
         let bounds = self.bounds();
-        self.position += movement;
         for object in objects {
-            let object_bounds = object.bounds();
-            if let Some((_collision_time, normal)) = bounds.sweep(movement, &object_bounds) {
-                if normal.y > 0.0 && movement.y < 0.0 {
-                    let player_bounds = self.bounds();
-                    self.position.y += object_bounds.max.y - player_bounds.min.y;
-                    self.velocity.y = 0.0;
+            if let Some((time, normal)) = bounds.sweep(movement, &object.bounds()) {
+                // println!("COLLISION time={time}, normal={normal:?}, movement={movement:?}");
+                //
+                // Moving into object from Above
+                if normal.y == 1.0 && movement.y < 0.0 {
                     self.ground();
-                } else {
-                    if normal.x != 0.0 {
-                        self.velocity.x = 0.0;
-                    }
-                    if normal.y != 0.0 {
-                        self.velocity.y = 0.0;
-                    }
-                    if normal.z != 0.0 {
-                        self.velocity.z = 0.0;
-                    }
+                }
+                // Moving into object from below
+                if normal.y == -1.0 {
+                    self.velocity.y = 0.0;
+                }
+                if normal.z != 0.0 {
+                    self.velocity.z = 0.0;
+                }
+                if normal.x != 0.0 {
+                    self.velocity.x = 0.0;
                 }
             }
         }
-        self.check_terrain_collision(&terrain);
+        self.position += self.velocity * delta_time;
+        self.check_terrain_collision(&ground);
     }
 }
 
