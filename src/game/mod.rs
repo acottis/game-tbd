@@ -284,7 +284,12 @@ impl Game {
         let objects = vec![platform];
 
         let ground_asset = assets.get(ModelId::Ground);
-        let terrain = Terrain::new(ModelId::Ground, Vec3::ZERO, Vec3::splat(40.0), ground_asset);
+        let terrain = Terrain::new(
+            ModelId::Ground,
+            Vec3::ZERO,
+            Vec3::new(200.0, 100.0, 200.0),
+            ground_asset,
+        );
 
         let mut labels = Store::new();
         labels.create(Label::new(

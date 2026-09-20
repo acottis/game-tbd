@@ -306,8 +306,18 @@ impl Text {
         let cache = glyphon::Cache::new(&device);
         let viewport = glyphon::Viewport::new(&device, &cache);
         let mut atlas = glyphon::TextAtlas::new(&device, &queue, &cache, texture_format);
-        let renderer =
-            glyphon::TextRenderer::new(&mut atlas, &device, MultisampleState::default(), None);
+        let renderer = glyphon::TextRenderer::new(
+            &mut atlas,
+            &device,
+            MultisampleState::default(),
+            Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: Some(false),
+                depth_compare: None,
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
+        );
 
         Self {
             renderer,
@@ -387,20 +397,6 @@ impl Text {
             .unwrap();
     }
 
-    fn render_pass_descriptor<'tex>(
-        &self,
-        color_attachments: &'tex [Option<RenderPassColorAttachment<'tex>>],
-    ) -> RenderPassDescriptor<'tex> {
-        RenderPassDescriptor {
-            label: Some("Glyphon"),
-            color_attachments,
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        }
-    }
-
     fn resize(&mut self, queue: &Queue, width: u32, height: u32) {
         self.viewport
             .update(&queue, glyphon::Resolution { width, height });
@@ -468,24 +464,26 @@ impl GpuTransform {
     }
 }
 
-struct Transforms {
+struct ModelTransforms {
     buffer: Buffer,
     bind_group: BindGroup,
+    layout: BindGroupLayout,
     transforms: Vec<Transform>,
     capacity: usize,
 }
 
-impl Transforms {
-    fn new(device: &Device, layout: &BindGroupLayout, capacity: usize) -> Self {
+impl ModelTransforms {
+    fn new(device: &Device, capacity: usize) -> Self {
+        let layout = Self::layout(device);
         let buffer = device.create_buffer(&BufferDescriptor {
-            label: None,
+            label: Some("Model Transforms"),
             size: (capacity * size_of::<Transform>()) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: None,
-            layout,
+            layout: &layout,
             entries: &[BindGroupEntry {
                 binding: 0,
                 resource: buffer.as_entire_binding(),
@@ -496,23 +494,17 @@ impl Transforms {
             bind_group,
             capacity,
             transforms: Vec::with_capacity(capacity),
+            layout,
         }
     }
 
-    fn write(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        layout: &BindGroupLayout,
-        game: &Game,
-        asset_models: &AssetModelSet,
-    ) {
+    fn write(&mut self, device: &Device, queue: &Queue, game: &Game, asset_models: &AssetModelSet) {
         // TODO: Think about this
         if self.transforms.len() > self.capacity {
             let transforms = std::mem::take(&mut self.transforms);
             let capacity = transforms.len().next_power_of_two();
 
-            let mut new = Self::new(device, layout, capacity);
+            let mut new = Self::new(device, capacity);
             new.transforms = transforms;
             *self = new;
         }
@@ -872,6 +864,21 @@ impl Vertex {
     }
 }
 
+struct Camera {
+    transform: GpuTransform,
+    layout: BindGroupLayout,
+}
+
+impl Camera {
+    fn new(device: &Device) -> Self {
+        let layout = GpuTransform::layout(&device, Some("Camera"));
+        Self {
+            transform: GpuTransform::new(&device, &layout, Some("Camera")),
+            layout,
+        }
+    }
+}
+
 pub struct Gpu {
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
@@ -881,9 +888,8 @@ pub struct Gpu {
     render_pipeline: RenderPipeline,
     depth_view: TextureView,
 
-    camera: GpuTransform,
-    transforms: Transforms,
-    transforms_layout: BindGroupLayout,
+    camera: Camera,
+    transforms: ModelTransforms,
     material_layout: BindGroupLayout,
 
     lighting: Lighting,
@@ -906,22 +912,20 @@ impl Gpu {
         let mut text = Text::new(&device, &queue, surface_config.format);
         text.resize(&queue, window_size.width, window_size.height);
 
-        let camera_layout = GpuTransform::layout(&device, Some("Camera"));
-        let camera = GpuTransform::new(&device, &camera_layout, Some("Camera"));
+        let camera = Camera::new(&device);
 
-        let transforms_layout = Transforms::layout(&device);
-        let transforms = Transforms::new(&device, &transforms_layout, 64);
+        let transforms = ModelTransforms::new(&device, 64);
 
-        let lighting = Lighting::new(&device, &transforms_layout);
+        let lighting = Lighting::new(&device, &transforms.layout);
         let material_layout = Material::layout(&device);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[
-                Some(&camera_layout),
+                Some(&camera.layout),
                 Some(&lighting.layout),
                 Some(&material_layout),
-                Some(&transforms_layout),
+                Some(&transforms.layout),
             ],
             immediate_size: 0,
         });
@@ -977,7 +981,6 @@ impl Gpu {
             depth_view,
             camera,
             transforms,
-            transforms_layout,
             lighting,
             text,
         }
@@ -1021,31 +1024,21 @@ impl Gpu {
         models: &ModelSet,
         asset_models: &AssetModelSet,
     ) {
-        let frame = match self.surface.get_current_texture() {
-            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
-            e => unimplemented!("{e:?}"),
-        };
-
         self.lighting.shadows.camera.write(
             &self.queue,
             &game.light.shadow_transform(game.camera.target()),
         );
 
         self.camera
+            .transform
             .write(&self.queue, &game.camera.view_projection_matrix());
 
         self.queue
             .write_buffer(&self.lighting.buffer, 0, bytes_of(&game.light));
 
         // Transform the models to their wold coordinates
-        self.transforms.write(
-            &self.device,
-            &self.queue,
-            &self.transforms_layout,
-            game,
-            asset_models,
-        );
+        self.transforms
+            .write(&self.device, &self.queue, game, asset_models);
 
         self.text.sync_buffers(&game.labels);
         self.text.update(&game.labels);
@@ -1057,6 +1050,12 @@ impl Gpu {
             &game.labels,
         );
 
+        let frame = match self.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+            e => unimplemented!("{e:?}"),
+        };
+
         let view = &frame.texture.create_view(&Default::default());
 
         let color_attachments = [Some(RenderPassColorAttachment {
@@ -1064,15 +1063,6 @@ impl Gpu {
             resolve_target: None,
             ops: Operations {
                 load: LoadOp::Clear(Default::default()),
-                store: StoreOp::Store,
-            },
-            depth_slice: None,
-        })];
-        let text_color_attachments = [Some(RenderPassColorAttachment {
-            view,
-            resolve_target: None,
-            ops: Operations {
-                load: LoadOp::Load,
                 store: StoreOp::Store,
             },
             depth_slice: None,
@@ -1101,14 +1091,14 @@ impl Gpu {
             }
             models
                 .get(game.terrain.model)
-                .draw(&mut shadow_pass, transform_index);
+                .draw_shadow(&mut shadow_pass, transform_index);
         }
         // Render the models/light
         {
             let mut render_pass =
                 encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.camera.bind_group, &[]);
+            render_pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
             render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
             render_pass.set_bind_group(3, &self.transforms.bind_group, &[]);
 
@@ -1126,11 +1116,6 @@ impl Gpu {
             models
                 .get(game.terrain.model)
                 .draw(&mut render_pass, transform_index);
-        }
-        // Render 2D text
-        {
-            let mut render_pass = encoder
-                .begin_render_pass(&self.text.render_pass_descriptor(&text_color_attachments));
 
             self.text
                 .renderer

@@ -17,7 +17,9 @@ pub struct Camera {
     /// Field of view
     fovy: f32,
     aspect: f32,
+    /// Where is the closest thing we show
     near: f32,
+    /// Where is the furthest thing we show
     far: f32,
 }
 
@@ -29,8 +31,8 @@ impl Camera {
             up: Vec3::new(0.0, 1.0, 0.0),
             fovy: PI / 4.0,
             aspect: window_size.width as f32 / window_size.height as f32,
-            near: 0.1,
-            far: 1000.0,
+            near: 0.01,
+            far: 100000.0,
         }
     }
 
@@ -54,8 +56,7 @@ impl Camera {
     }
 
     pub fn forward_planar(&self) -> Vec3 {
-        let mut forward = self.target - self.position;
-        forward.y = 0.0;
+        let forward = self.target - self.position;
         forward.normalize_or_zero()
     }
 
