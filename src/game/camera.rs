@@ -102,6 +102,7 @@ impl Camera {
         self.position = self.target + delta.normalize_or_zero() * new_distance;
     }
 
+    #[inline(always)]
     pub fn view_projection_matrix(&self) -> Mat4 {
         let projection = proj::directx::perspective(self.fovy, self.aspect, self.near, self.far);
         let view = view::look_at_mat4(self.position, self.target, self.up);
