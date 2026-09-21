@@ -26,10 +26,21 @@ impl Light {
     }
 
     pub fn shadow_transform(&self, target: Vec3) -> Mat4 {
+        const ORTHO_EXTENT: f32 = 150.0;
+        const CAMERA_DISTANCE: f32 = 250.0;
+        const NEAR: f32 = 0.1;
+        const FAR: f32 = 500.0;
         let direction = self.direction.normalize();
-        let position = target - direction * 50.0;
+        let position = target - direction * CAMERA_DISTANCE;
 
-        let proj = proj::directx::orthographic(-100.0, 100.0, -100.0, 100.0, 0.1, 100.0);
+        let proj = proj::directx::orthographic(
+            -ORTHO_EXTENT,
+            ORTHO_EXTENT,
+            -ORTHO_EXTENT,
+            ORTHO_EXTENT,
+            NEAR,
+            FAR,
+        );
         let view = view::look_at_mat4(position, target, Vec3::Y);
 
         proj * view

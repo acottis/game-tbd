@@ -124,9 +124,11 @@ impl Lighting {
 
     fn prepare(&mut self, queue: &Queue, game: &Game) {
         queue.write_buffer(&self.buffer, 0, bytes_of(&game.light));
+
+        let shadow_target = game.camera.target() + game.camera.forward() * 150.0;
         self.shadows
             .camera
-            .write(queue, &game.light.shadow_transform(game.camera.target()));
+            .write(queue, &game.light.shadow_transform(shadow_target));
     }
 }
 
@@ -322,7 +324,7 @@ impl GpuTransform {
         Self { buffer, bind_group }
     }
 
-    fn write(&mut self, queue: &Queue, transform: &Mat4) {
+    fn write(&self, queue: &Queue, transform: &Mat4) {
         queue.write_buffer(&self.buffer, 0, bytes_of(transform));
     }
 
@@ -762,6 +764,11 @@ impl Camera {
             layout,
         }
     }
+
+    fn prepare(&self, queue: &Queue, game: &Game) {
+        self.transform
+            .write(queue, &game.camera.view_projection_matrix());
+    }
 }
 
 struct Sky {
@@ -822,7 +829,7 @@ impl Sky {
         render_pass.draw(0..3, 0..1);
     }
 
-    fn prepare(&mut self, queue: &Queue, game: &Game) {
+    fn prepare(&self, queue: &Queue, game: &Game) {
         self.camera
             .write(queue, &game.camera.sky_inverse_view_projection_matrix());
     }
@@ -830,27 +837,12 @@ impl Sky {
 
 struct TextDraw {
     text: Handle<game::text::Text>,
-    position: TextPosition,
-}
-
-enum TextPosition {
-    Screen(Vec2),
-    World(Vec3),
+    position: Vec2,
 }
 
 impl TextDraw {
-    fn screen(text: Handle<game::text::Text>, position: Vec2) -> Self {
-        Self {
-            text,
-            position: TextPosition::Screen(position),
-        }
-    }
-
-    fn world(text: Handle<game::text::Text>, position: Vec3) -> Self {
-        Self {
-            text,
-            position: TextPosition::World(position),
-        }
+    fn new(text: Handle<game::text::Text>, position: Vec2) -> Self {
+        Self { text, position }
     }
 }
 struct TextBuffer {
@@ -930,14 +922,6 @@ impl Text {
         }
     }
 
-    fn begin_frame(&mut self, game: &Game) {
-        self.draws.clear();
-
-        while self.buffers.len() < game.texts.len() {
-            self.buffers.push(TextBuffer::new(&mut self.font_system));
-        }
-    }
-
     fn queue(&mut self, game: &Game, draw: TextDraw) {
         let text = game.texts.get(draw.text).unwrap();
         let buffer = self.buffers.get_mut(draw.text.index()).unwrap();
@@ -947,20 +931,35 @@ impl Text {
     }
 
     fn prepare(&mut self, device: &Device, queue: &Queue, width: u32, height: u32, game: &Game) {
+        self.draws.clear();
+
+        while self.buffers.len() < game.texts.len() {
+            self.buffers.push(TextBuffer::new(&mut self.font_system));
+        }
+
+        self.queue(game, TextDraw::new(game.fps, Vec2::ZERO));
+
         let view_projection = game.camera.view_projection_matrix();
+        for entity in &game.entities {
+            let Some(nameplate) = entity.nameplate else {
+                continue;
+            };
+
+            let position = world_to_screen(
+                view_projection,
+                entity.position() + Vec3::Y * 1.5,
+                width,
+                height,
+            )
+            .unwrap();
+            self.queue(game, TextDraw::new(nameplate, position));
+        }
 
         let areas = self.draws.iter().filter_map(|draw| {
             let text = game.texts.get(draw.text).unwrap();
             let buffer = self.buffers.get(draw.text.index()).unwrap();
 
-            let position = match draw.position {
-                TextPosition::Screen(position) => position,
-                TextPosition::World(world_position) => {
-                    world_to_screen(view_projection, world_position, width, height)?
-                }
-            };
-
-            Some(Self::text_area(buffer, text, position, width, height))
+            Some(Self::text_area(buffer, text, draw.position, width, height))
         });
 
         self.renderer
@@ -1040,7 +1039,7 @@ pub struct Gpu {
     depth_view: TextureView,
 
     camera: Camera,
-    transforms: ModelTransforms,
+    model_transforms: ModelTransforms,
     lighting: Lighting,
     sky: Sky,
     text: Text,
@@ -1067,9 +1066,9 @@ impl Gpu {
         let camera = Camera::new(&device);
         let sky = Sky::new(&device, &surface_config);
 
-        let transforms = ModelTransforms::new(&device, 64);
+        let model_transforms = ModelTransforms::new(&device, 64);
 
-        let lighting = Lighting::new(&device, &transforms.layout);
+        let lighting = Lighting::new(&device, &model_transforms.layout);
         let material_layout = Material::layout(&device);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -1078,7 +1077,7 @@ impl Gpu {
                 Some(&camera.layout),
                 Some(&lighting.layout),
                 Some(&material_layout),
-                Some(&transforms.layout),
+                Some(&model_transforms.layout),
             ],
             immediate_size: 0,
         });
@@ -1133,7 +1132,7 @@ impl Gpu {
             material_layout,
             depth_view,
             camera,
-            transforms,
+            model_transforms,
             lighting,
             text,
             sky,
@@ -1178,30 +1177,11 @@ impl Gpu {
         models: &ModelSet,
         asset_models: &AssetModelSet,
     ) {
-        self.camera
-            .transform
-            .write(&self.queue, &game.camera.view_projection_matrix());
-
+        self.camera.prepare(&self.queue, game);
         self.sky.prepare(&self.queue, game);
-
         self.lighting.prepare(&self.queue, game);
-
-        // Transform the models to their wold coordinates
-        self.transforms
+        self.model_transforms
             .prepare(&self.device, &self.queue, game, asset_models);
-
-        self.text.begin_frame(game);
-        self.text
-            .queue(game, TextDraw::screen(game.fps, Vec2::ZERO));
-        for entity in &game.entities {
-            let Some(nameplate) = entity.nameplate else {
-                continue;
-            };
-            self.text.queue(
-                game,
-                TextDraw::world(nameplate, entity.position() + Vec3::Y * 2.0),
-            );
-        }
         self.text.prepare(
             &self.device,
             &self.queue,
@@ -1212,7 +1192,6 @@ impl Gpu {
 
         let frame = match self.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            // CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
             e => unimplemented!("{e:?}"),
         };
 
@@ -1229,14 +1208,13 @@ impl Gpu {
         })];
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-
         // Shadow pass
         {
             let mut shadow_pass =
                 encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
             shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
             shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
-            shadow_pass.set_bind_group(1, &self.transforms.bind_group, &[]);
+            shadow_pass.set_bind_group(1, &self.model_transforms.bind_group, &[]);
 
             let transform_index = &mut 0;
             for entity in &game.entities {
@@ -1260,7 +1238,7 @@ impl Gpu {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
             render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
-            render_pass.set_bind_group(3, &self.transforms.bind_group, &[]);
+            render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
             let transform_index = &mut 0;
             for entity in &game.entities {
