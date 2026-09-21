@@ -26,7 +26,7 @@ impl Light {
     }
 
     pub fn shadow_transform(&self, target: Vec3) -> Mat4 {
-        const ORTHO_EXTENT: f32 = 150.0;
+        const ORTHO_EXTENT: f32 = 200.0;
         const CAMERA_DISTANCE: f32 = 250.0;
         const NEAR: f32 = 0.1;
         const FAR: f32 = 500.0;
