@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use glam::{Mat4, Quat, Vec2, Vec3};
+use glam::{Mat4, Quat, Vec3};
 
 use glyphon::Color;
 use physics::GRAVITY;
@@ -15,7 +15,7 @@ use crate::{
         input::Input,
         light::Light,
         physics::{BoundingBox, GroundCollision},
-        text::{Anchor, Label},
+        text::{Anchor, Text},
     },
 };
 
@@ -55,6 +55,7 @@ pub struct Entity {
     velocity: Vec3,
     grounded: bool,
     bounding_box: BoundingBox,
+    pub nameplate: Option<Handle<Text>>,
     pub animation: Option<Animation>,
     pub model: ModelId,
 }
@@ -68,10 +69,16 @@ impl Entity {
             velocity: Vec3::ZERO,
             grounded: false,
             animation: None,
+            nameplate: None,
             model,
             bounding_box,
         }
     }
+
+    fn set_nameplate(&mut self, nameplate: Handle<Text>) {
+        self.nameplate = Some(nameplate)
+    }
+
     pub const fn position(&self) -> Vec3 {
         self.position
     }
@@ -146,7 +153,6 @@ impl Entity {
         transform(self.position, self.rotation, self.scale)
     }
 
-    // TODO: We don't handle moving into the object before collision kicks in
     pub fn move_and_collide(
         &mut self,
         delta_time: f32,
@@ -160,6 +166,7 @@ impl Entity {
         let movement = self.velocity * delta_time;
         let bounds = self.bounds();
         for object in objects {
+            // TODO: We don't handle moving into the object before collision kicks in
             if let Some((time, normal)) = bounds.sweep(movement, &object.bounds()) {
                 // println!("COLLISION time={time}, normal={normal:?}, movement={movement:?}");
                 //
@@ -247,8 +254,8 @@ pub struct Game {
     pub camera: Camera,
     pub light: Light,
     pub input: Input,
-    pub labels: Store<Label>,
-    fps: Handle<Label>,
+    pub texts: Store<Text>,
+    pub fps: Handle<Text>,
 }
 
 impl Game {
@@ -266,7 +273,7 @@ impl Game {
             0.1,
         );
 
-        let player = Entity::new(
+        let mut player = Entity::new(
             ModelId::Foo,
             Vec3::ZERO,
             Vec3::splat(0.3),
@@ -280,9 +287,6 @@ impl Game {
             BoundingBox::new(assets.get(ModelId::Platform)),
         );
 
-        let entities = vec![player];
-        let objects = vec![platform];
-
         let ground_asset = assets.get(ModelId::Ground);
         let terrain = Terrain::new(
             ModelId::Ground,
@@ -291,19 +295,23 @@ impl Game {
             ground_asset,
         );
 
-        let mut labels = Store::new();
-        labels.create(Label::new(
-            Vec2::new(0.0, 0.0),
+        let mut texts = Store::new();
+
+        let player_nameplate = texts.create(Text::new(
             Color::rgb(255, 255, 255),
             Anchor::Left,
-            "Foo Text 🦀",
+            "Foo Nameplate 🦀",
         ));
-        let fps = labels.create(Label::new(
-            Vec2::new(0.0, 0.0),
+        player.set_nameplate(player_nameplate);
+
+        let fps = texts.create(Text::new(
             Color::rgb(255, 255, 255),
             Anchor::Right,
             "FPS: 0.0",
         ));
+
+        let entities = vec![player];
+        let objects = vec![platform];
         Self {
             entities,
             terrain,
@@ -311,7 +319,7 @@ impl Game {
             light,
             input,
             objects,
-            labels,
+            texts,
             fps,
         }
     }
@@ -371,14 +379,13 @@ impl Game {
     }
 
     pub fn update(&mut self, delta_time: f32) {
-        self.labels
+        self.texts
             .get_mut(self.fps)
             .unwrap()
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
             entity.animate(delta_time);
-
             entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
         }
     }

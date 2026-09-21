@@ -2,7 +2,6 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use bytemuck::bytes_of;
 use glam::{Mat4, Vec2, Vec3};
-use glyphon::FontSystem;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt as _},
     *,
@@ -11,12 +10,8 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     assets::{self, AssetModel, AssetModelSet, ModelId},
-    engine::Store,
-    game::{
-        Entity, Game,
-        light::Light,
-        text::{Anchor, Label},
-    },
+    engine::Handle,
+    game::{self, Entity, Game, light::Light, text::Anchor},
 };
 
 fn animated_transform(entity: &Entity, model: &AssetModel) -> Mat4 {
@@ -283,157 +278,6 @@ impl Shadows {
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,
-        }
-    }
-}
-
-struct TextBuffer {
-    inner: glyphon::Buffer,
-    text_width: f32,
-    generation: u32,
-}
-
-impl TextBuffer {
-    fn new(font_system: &mut glyphon::FontSystem) -> Self {
-        let inner = glyphon::Buffer::new(font_system, glyphon::Metrics::new(20.0, 32.0));
-        Self {
-            inner,
-            text_width: 0.0,
-            generation: 0,
-        }
-    }
-
-    fn update(&mut self, font_system: &mut glyphon::FontSystem, label: &Label) {
-        if label.generation() != self.generation {
-            self.inner.set_text(
-                &label.text,
-                &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
-                glyphon::Shaping::Advanced,
-                None,
-            );
-            self.inner.shape_until_scroll(font_system, false);
-
-            self.text_width = self
-                .inner
-                .layout_runs()
-                .map(|run| run.line_w)
-                .fold(0.0, f32::max);
-            self.generation = label.generation();
-        }
-    }
-}
-
-struct Text {
-    renderer: glyphon::TextRenderer,
-    atlas: glyphon::TextAtlas,
-    viewport: glyphon::Viewport,
-    swash_cache: glyphon::SwashCache,
-    font_system: glyphon::FontSystem,
-    buffers: Vec<TextBuffer>,
-}
-
-impl Text {
-    fn new(device: &Device, queue: &Queue, texture_format: TextureFormat) -> Self {
-        let font_system = glyphon::FontSystem::new();
-        let swash_cache = glyphon::SwashCache::new();
-        let cache = glyphon::Cache::new(&device);
-        let viewport = glyphon::Viewport::new(&device, &cache);
-        let mut atlas = glyphon::TextAtlas::new(&device, &queue, &cache, texture_format);
-        let renderer = glyphon::TextRenderer::new(
-            &mut atlas,
-            &device,
-            MultisampleState::default(),
-            Some(DepthStencilState {
-                format: TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false),
-                depth_compare: None,
-                stencil: StencilState::default(),
-                bias: DepthBiasState::default(),
-            }),
-        );
-
-        Self {
-            renderer,
-            atlas,
-            viewport,
-            swash_cache,
-            font_system,
-            buffers: Vec::new(),
-        }
-    }
-
-    fn sync_buffers(&mut self, labels: &Store<Label>) {
-        while self.buffers.len() < labels.len() {
-            self.buffers.push(TextBuffer::new(&mut self.font_system));
-        }
-    }
-
-    fn update(&mut self, labels: &Store<Label>) {
-        for (label, buffer) in labels.iter().zip(self.buffers.iter_mut()) {
-            let Some(label) = label else { continue };
-            buffer.update(&mut self.font_system, label);
-        }
-    }
-
-    fn prepare(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        width: u32,
-        height: u32,
-        labels: &Store<Label>,
-    ) {
-        let text_areas =
-            self.buffers
-                .iter_mut()
-                .zip(labels.iter())
-                .filter_map(|(buffer, label)| {
-                    let label = label.as_ref()?;
-                    Some(Self::text_area(buffer, label, width, height))
-                });
-
-        self.renderer
-            .prepare(
-                device,
-                queue,
-                &mut self.font_system,
-                &mut self.atlas,
-                &self.viewport,
-                text_areas,
-                &mut self.swash_cache,
-            )
-            .unwrap();
-    }
-
-    fn resize(&mut self, queue: &Queue, width: u32, height: u32) {
-        self.viewport
-            .update(&queue, glyphon::Resolution { width, height });
-    }
-
-    fn text_area<'a>(
-        buffer: &'a mut TextBuffer,
-        label: &Label,
-        width: u32,
-        height: u32,
-    ) -> glyphon::TextArea<'a> {
-        let left = match label.anchor {
-            Anchor::Left => label.position.x,
-            Anchor::Right => width as f32 - label.position.x - buffer.text_width,
-        };
-
-        glyphon::TextArea {
-            buffer: &buffer.inner,
-            left,
-            top: label.position.y,
-            scale: 1.0,
-            bounds: glyphon::TextBounds {
-                left: 0,
-                top: 0,
-                right: width as i32,
-                bottom: height as i32,
-            },
-            default_color: label.color,
-            custom_glyphs: &[],
         }
     }
 }
@@ -960,7 +804,7 @@ impl Sky {
             primitive: Default::default(),
             depth_stencil: Some(DepthStencilState {
                 format: TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
+                depth_write_enabled: Some(false),
                 depth_compare: Some(CompareFunction::LessEqual),
                 stencil: Default::default(),
                 bias: Default::default(),
@@ -982,6 +826,208 @@ impl Sky {
         self.camera
             .write(queue, &game.camera.sky_inverse_view_projection_matrix());
     }
+}
+
+struct TextDraw {
+    text: Handle<game::text::Text>,
+    position: TextPosition,
+}
+
+enum TextPosition {
+    Screen(Vec2),
+    World(Vec3),
+}
+
+impl TextDraw {
+    fn screen(text: Handle<game::text::Text>, position: Vec2) -> Self {
+        Self {
+            text,
+            position: TextPosition::Screen(position),
+        }
+    }
+
+    fn world(text: Handle<game::text::Text>, position: Vec3) -> Self {
+        Self {
+            text,
+            position: TextPosition::World(position),
+        }
+    }
+}
+struct TextBuffer {
+    inner: glyphon::Buffer,
+    text_width: f32,
+    generation: u32,
+}
+
+impl TextBuffer {
+    fn new(font_system: &mut glyphon::FontSystem) -> Self {
+        let inner = glyphon::Buffer::new(font_system, glyphon::Metrics::new(20.0, 32.0));
+        Self {
+            inner,
+            text_width: 0.0,
+            generation: 0,
+        }
+    }
+
+    fn update(&mut self, font_system: &mut glyphon::FontSystem, text: &game::text::Text) {
+        if text.generation() != self.generation {
+            self.inner.set_text(
+                &text.text,
+                &glyphon::Attrs::new().family(glyphon::Family::SansSerif),
+                glyphon::Shaping::Advanced,
+                None,
+            );
+            self.inner.shape_until_scroll(font_system, false);
+
+            self.text_width = self
+                .inner
+                .layout_runs()
+                .map(|run| run.line_w)
+                .fold(0.0, f32::max);
+            self.generation = text.generation();
+        }
+    }
+}
+
+struct Text {
+    renderer: glyphon::TextRenderer,
+    atlas: glyphon::TextAtlas,
+    viewport: glyphon::Viewport,
+    swash_cache: glyphon::SwashCache,
+    font_system: glyphon::FontSystem,
+    buffers: Vec<TextBuffer>,
+    draws: Vec<TextDraw>,
+}
+
+impl Text {
+    fn new(device: &Device, queue: &Queue, texture_format: TextureFormat) -> Self {
+        let font_system = glyphon::FontSystem::new();
+        let swash_cache = glyphon::SwashCache::new();
+        let cache = glyphon::Cache::new(&device);
+        let viewport = glyphon::Viewport::new(&device, &cache);
+        let mut atlas = glyphon::TextAtlas::new(&device, &queue, &cache, texture_format);
+        let renderer = glyphon::TextRenderer::new(
+            &mut atlas,
+            &device,
+            MultisampleState::default(),
+            Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: Some(false),
+                depth_compare: None,
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
+        );
+
+        Self {
+            renderer,
+            atlas,
+            viewport,
+            swash_cache,
+            font_system,
+            buffers: Vec::new(),
+            draws: Vec::new(),
+        }
+    }
+
+    fn begin_frame(&mut self, game: &Game) {
+        self.draws.clear();
+
+        while self.buffers.len() < game.texts.len() {
+            self.buffers.push(TextBuffer::new(&mut self.font_system));
+        }
+    }
+
+    fn queue(&mut self, game: &Game, draw: TextDraw) {
+        let text = game.texts.get(draw.text).unwrap();
+        let buffer = self.buffers.get_mut(draw.text.index()).unwrap();
+        buffer.update(&mut self.font_system, text);
+
+        self.draws.push(draw)
+    }
+
+    fn prepare(&mut self, device: &Device, queue: &Queue, width: u32, height: u32, game: &Game) {
+        let view_projection = game.camera.view_projection_matrix();
+
+        let areas = self.draws.iter().filter_map(|draw| {
+            let text = game.texts.get(draw.text).unwrap();
+            let buffer = self.buffers.get(draw.text.index()).unwrap();
+
+            let position = match draw.position {
+                TextPosition::Screen(position) => position,
+                TextPosition::World(world_position) => {
+                    world_to_screen(view_projection, world_position, width, height)?
+                }
+            };
+
+            Some(Self::text_area(buffer, text, position, width, height))
+        });
+
+        self.renderer
+            .prepare(
+                device,
+                queue,
+                &mut self.font_system,
+                &mut self.atlas,
+                &self.viewport,
+                areas,
+                &mut self.swash_cache,
+            )
+            .unwrap();
+    }
+
+    fn resize(&mut self, queue: &Queue, width: u32, height: u32) {
+        self.viewport
+            .update(&queue, glyphon::Resolution { width, height });
+    }
+
+    fn text_area<'a>(
+        buffer: &'a TextBuffer,
+        text: &game::text::Text,
+        position: Vec2,
+        width: u32,
+        height: u32,
+    ) -> glyphon::TextArea<'a> {
+        let left = match text.anchor {
+            Anchor::Left => position.x,
+            Anchor::Right => width as f32 - position.x - buffer.text_width,
+        };
+
+        glyphon::TextArea {
+            buffer: &buffer.inner,
+            left,
+            top: position.y,
+            scale: 1.0,
+            bounds: glyphon::TextBounds {
+                left: 0,
+                top: 0,
+                right: width as i32,
+                bottom: height as i32,
+            },
+            default_color: text.color,
+            custom_glyphs: &[],
+        }
+    }
+}
+
+fn world_to_screen(
+    view_projection: Mat4,
+    world_position: Vec3,
+    width: u32,
+    height: u32,
+) -> Option<Vec2> {
+    let clip = view_projection * world_position.extend(1.0);
+
+    if clip.w <= 0.0 {
+        return None;
+    }
+
+    let ndc = clip.truncate() / clip.w;
+
+    Some(Vec2::new(
+        (ndc.x + 1.0) * 0.5 * width as f32,
+        (1.0 - ndc.y) * 0.5 * height as f32,
+    ))
 }
 
 pub struct Gpu {
@@ -1144,14 +1190,24 @@ impl Gpu {
         self.transforms
             .prepare(&self.device, &self.queue, game, asset_models);
 
-        self.text.sync_buffers(&game.labels);
-        self.text.update(&game.labels);
+        self.text.begin_frame(game);
+        self.text
+            .queue(game, TextDraw::screen(game.fps, Vec2::ZERO));
+        for entity in &game.entities {
+            let Some(nameplate) = entity.nameplate else {
+                continue;
+            };
+            self.text.queue(
+                game,
+                TextDraw::world(nameplate, entity.position() + Vec3::Y * 2.0),
+            );
+        }
         self.text.prepare(
             &self.device,
             &self.queue,
             self.surface_config.width,
             self.surface_config.height,
-            &game.labels,
+            game,
         );
 
         let frame = match self.surface.get_current_texture() {

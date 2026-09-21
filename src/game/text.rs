@@ -1,27 +1,18 @@
-use glam::Vec2;
-
 pub enum Anchor {
     Left,
     Right,
 }
 
-pub struct Label {
-    pub position: Vec2,
+pub struct Text {
     pub anchor: Anchor,
     pub color: glyphon::Color,
     pub text: String,
     generation: u32,
 }
 
-impl Label {
-    pub fn new(
-        position: Vec2,
-        color: glyphon::Color,
-        anchor: Anchor,
-        text: impl Into<String>,
-    ) -> Self {
+impl Text {
+    pub fn new(color: glyphon::Color, anchor: Anchor, text: impl Into<String>) -> Self {
         Self {
-            position,
             color,
             text: text.into(),
             // Start at one so we immediately need to draw
