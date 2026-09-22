@@ -129,7 +129,7 @@ impl Lighting {
     fn prepare(&mut self, queue: &Queue, game: &Game) {
         queue.write_buffer(&self.buffer, 0, bytes_of(&game.light));
 
-        let shadow_target = game.camera.target() + game.camera.forward() * 150.0;
+        let shadow_target = game.camera.target() + game.camera.forward() * 25.0;
         self.shadows
             .camera
             .write(queue, &game.light.shadow_transform(shadow_target));
