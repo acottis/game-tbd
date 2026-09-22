@@ -1,14 +1,18 @@
 mod gltf;
 
-use std::path::Path;
+use std::{array, path::Path};
 
 use glam::Mat4;
 pub use gltf::load;
 use image::DynamicImage;
 
-use crate::{engine::physics::BoundingBox, game::animation::AnimationSet, graphics::Vertex};
+use crate::{
+    engine::{animation::Skin, physics::BoundingBox},
+    game::animation::AnimationSet,
+    graphics::Vertex,
+};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(u8)]
 pub enum ModelId {
     Foo = 0,
@@ -64,12 +68,55 @@ impl Default for Material {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct Node {
+    pub parent: Option<u32>,
+    pub local_transform: Mat4,
+    pub mesh: Option<u32>,
+}
+
+pub struct Mesh {
+    pub primitives: Vec<Primitive>,
+    pub bounding_box: BoundingBox,
+}
+
+#[derive(Clone, Debug)]
+pub struct Primitive {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub material: Option<usize>,
+}
+
+impl Primitive {
+    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Option<usize>) -> Self {
+        Self {
+            vertices,
+            indices,
+            material,
+        }
+    }
+}
+
+// To avoid interating over every node in renderer
+#[derive(Debug, Clone, Copy)]
+pub struct RenderNode {
+    pub node: u32,
+    pub mesh: u32,
+    pub skin: Option<u32>,
+}
+
 pub struct AssetModel {
+    pub nodes: Vec<Node>,
+    pub render_nodes: Vec<RenderNode>,
+    pub node_order: Vec<u32>,
     pub meshes: Vec<Mesh>,
     pub animations: AnimationSet,
     pub materials: Vec<Material>,
     pub bounding_box: BoundingBox,
+    pub skins: Vec<Skin>,
+    pub rest_world_transforms: Vec<Mat4>,
 }
+
 pub struct AssetModelSet(pub Vec<AssetModel>);
 
 impl AssetModelSet {
@@ -77,7 +124,7 @@ impl AssetModelSet {
     pub fn load() -> Self {
         let dir = std::fs::read_dir("assets").unwrap();
 
-        let mut assets: Vec<Option<AssetModel>> = (0..ModelId::COUNT).map(|_| None).collect();
+        let mut assets: [Option<AssetModel>; ModelId::COUNT] = array::from_fn(|_| None);
         for entry in dir {
             let path = entry.unwrap().path();
 
@@ -100,28 +147,5 @@ impl AssetModelSet {
 
     pub fn get(&self, id: ModelId) -> &AssetModel {
         &self.0[id as usize]
-    }
-}
-
-pub struct Mesh {
-    pub primitives: Vec<Primitive>,
-    pub bounding_box: BoundingBox,
-    pub transform: Mat4,
-}
-
-#[derive(Clone, Debug)]
-pub struct Primitive {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
-    pub material: Option<usize>,
-}
-
-impl Primitive {
-    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Option<usize>) -> Self {
-        Self {
-            vertices,
-            indices,
-            material,
-        }
     }
 }

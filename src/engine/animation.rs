@@ -1,6 +1,9 @@
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use gltf::animation::Interpolation;
 
+use crate::assets::AssetModel;
+
+// TODO: Perf
 fn keyframes(times: &[f32], time: f32) -> (usize, usize, f32) {
     if times.len() <= 1 {
         return (0, 0, 0.0);
@@ -46,7 +49,7 @@ fn sample_quat(interpolation: Interpolation, times: &[f32], values: &[Quat], tim
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Translation {
     interpolation: Interpolation,
     times: Vec<f32>,
@@ -63,7 +66,7 @@ impl Translation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Rotation {
     interpolation: Interpolation,
     times: Vec<f32>,
@@ -80,7 +83,7 @@ impl Rotation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scale {
     interpolation: Interpolation,
     times: Vec<f32>,
@@ -97,50 +100,112 @@ impl Scale {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct NodeAnimation {
+    pub translation: Option<Translation>,
+    pub rotation: Option<Rotation>,
+    pub scale: Option<Scale>,
+}
+
 #[derive(Debug)]
 pub struct AnimationClip {
-    translations: Vec<Translation>,
-    rotations: Vec<Rotation>,
-    scales: Vec<Scale>,
-
+    nodes: Vec<Option<NodeAnimation>>,
     duration: f32,
 }
 
 impl AnimationClip {
-    pub fn new(
-        translations: Vec<Translation>,
-        rotations: Vec<Rotation>,
-        scales: Vec<Scale>,
-        duration: f32,
-    ) -> Self {
-        Self {
-            translations,
-            rotations,
-            scales,
-            duration,
-        }
+    pub fn new(nodes: Vec<Option<NodeAnimation>>, duration: f32) -> Self {
+        Self { nodes, duration }
+    }
+    pub fn duration(&self) -> f32 {
+        self.duration
     }
 }
 
 impl AnimationClip {
-    pub fn sample(&self, mut time: f32) -> (Vec3, Quat, Vec3) {
-        // Loop animation if run for longer than duration
-        time = time % self.duration;
+    pub fn sample_node(&self, index: u32, base_transform: Mat4, time: f32) -> Mat4 {
+        let Some(ref node) = self.nodes[index as usize] else {
+            return base_transform;
+        };
 
-        let mut translation = Vec3::ZERO;
-        let mut rotation = Quat::IDENTITY;
-        let mut scale = Vec3::ONE;
+        let (mut translation, mut rotation, mut scale) =
+            base_transform.to_scale_rotation_translation();
 
-        for channel in &self.translations {
+        if let Some(channel) = &node.translation {
             translation = sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
         }
-        for channel in &self.rotations {
+        if let Some(channel) = &node.rotation {
             rotation = sample_quat(channel.interpolation, &channel.times, &channel.values, time);
         }
-        for channel in &self.scales {
+        if let Some(channel) = &node.scale {
             scale = sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
         }
 
-        (translation, rotation, scale)
+        Mat4::from_scale_rotation_translation(scale, rotation, translation)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Joint {
+    pub node: u32,
+    pub inverse_bind: Mat4,
+}
+
+#[derive(Debug, Clone)]
+pub struct Skin {
+    pub joints: Vec<Joint>,
+}
+
+impl Skin {
+    pub fn new(joints: Vec<Joint>) -> Self {
+        Self { joints }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SkinPose {
+    pub matrices: Vec<Mat4>,
+}
+
+impl SkinPose {
+    pub fn new(skeleton: &Skin) -> Self {
+        Self {
+            matrices: vec![Mat4::IDENTITY; skeleton.joints.len()],
+        }
+    }
+
+    pub fn update(&mut self, skeleton: &Skin, pose: &Pose) {
+        for (index, joint) in skeleton.joints.iter().enumerate() {
+            self.matrices[index] = pose.world_transforms[joint.node as usize] * joint.inverse_bind;
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Pose {
+    pub world_transforms: Vec<Mat4>,
+}
+
+impl Pose {
+    pub fn new(world_transforms: &[Mat4]) -> Self {
+        Self {
+            world_transforms: world_transforms.into(),
+        }
+    }
+
+    pub fn update(&mut self, asset: &AssetModel, animation: &AnimationClip, mut time: f32) {
+        // Loop animation if run for longer than duration
+        if animation.duration > 0.0 {
+            time %= animation.duration;
+        }
+
+        for index in asset.node_order.iter().cloned() {
+            let node = &asset.nodes[index as usize];
+            let local_transform = animation.sample_node(index as u32, node.local_transform, time);
+            self.world_transforms[index as usize] = match node.parent {
+                Some(parent) => self.world_transforms[parent as usize] * local_transform,
+                None => local_transform,
+            };
+        }
     }
 }

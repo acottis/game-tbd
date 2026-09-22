@@ -117,7 +117,7 @@ impl ApplicationHandler for App {
         log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
 
         self.handle_inputs(event_loop);
-        self.game.update(self.delta_time);
+        self.game.update(self.delta_time, &self.assets);
         self.render();
     }
 

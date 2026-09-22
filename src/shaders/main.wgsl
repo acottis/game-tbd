@@ -1,6 +1,8 @@
+
 struct Transform {
     model: mat4x4<f32>,
     normal: mat4x4<f32>,
+    bone_offset: u32,
 }
 
 struct Material {
@@ -21,6 +23,8 @@ struct VertexInput {
     @location(0) vertex: vec3<f32>,
 	@location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
+    @location(3) joints: vec4<u32>,
+    @location(4) weights: vec4<f32>,
 }
 
 struct VertexOutput {
@@ -52,19 +56,37 @@ var material_s: sampler;
 
 @group(3) @binding(0)
 var<storage, read> transforms: array<Transform>;
+@group(3) @binding(1)
+var<storage, read> bones: array<mat4x4<f32>>;
+
+const NO_BONES: u32 =  0xffffffffu;
 
 @vertex
 fn vs_main(in: VertexInput, @builtin(instance_index) index: u32) -> VertexOutput {
     let transform = transforms[index];
-    let world_position = transform.model * vec4<f32>(in.vertex, 1.0);
+
+    var local_position = vec4<f32>(in.vertex, 1.0);
+    var local_normal = vec4<f32>(in.normal, 0.0);
+
+    let bone_offset = transform.bone_offset;
+    if bone_offset != NO_BONES {
+        let skin_matrix =
+            bones[bone_offset + in.joints.x] * in.weights.x +
+            bones[bone_offset + in.joints.y] * in.weights.y +
+            bones[bone_offset + in.joints.z] * in.weights.z +
+            bones[bone_offset + in.joints.w] * in.weights.w;
+
+        local_position = skin_matrix * local_position;
+        local_normal = skin_matrix * local_normal;
+    }
+
+    let world_position = transform.model * local_position;
 
     var out: VertexOutput;
     out.position = view_projection * world_position;
     out.uv = in.uv;
-    out.normal = (transform.normal * vec4<f32>(in.normal, 0.0)).xyz;
-    
+    out.normal = (transform.normal * local_normal).xyz;
     out.shadow_position = light_view_projection * world_position;
-
     return out;
 }
 

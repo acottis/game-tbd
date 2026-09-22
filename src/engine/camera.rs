@@ -26,9 +26,9 @@ pub struct Camera {
 impl Camera {
     pub const fn new(window_size: &PhysicalSize<u32>) -> Self {
         Self {
-            position: Vec3::new(0.0, 1.75, -3.0),
-            target: Vec3::new(0.0, 1.25, 0.0),
-            up: Vec3::new(0.0, 1.0, 0.0),
+            position: Vec3::new(0.0, 10.0, -8.0),
+            target: Vec3::new(0.0, 6.0, 0.0),
+            up: Vec3::Y,
             fovy: PI / 4.0,
             aspect: window_size.width as f32 / window_size.height as f32,
             near: 0.01,
@@ -48,18 +48,13 @@ impl Camera {
     pub fn follow(&mut self, target: Vec3) {
         let offset = self.position - self.target;
 
-        self.target = target;
-        self.position = target + offset;
+        self.target = target + Vec3::Y;
+        self.position = self.target + offset;
     }
 
     #[inline(always)]
     pub fn forward(&self) -> Vec3 {
         (self.target - self.position).normalize_or_zero()
-    }
-
-    pub fn forward_planar(&self) -> Vec3 {
-        let forward = self.target - self.position;
-        forward.normalize_or_zero()
     }
 
     pub fn right(&self) -> Vec3 {
@@ -82,7 +77,7 @@ impl Camera {
     }
 
     pub fn move_forward(&mut self, distance: f32) {
-        let delta = self.forward_planar() * distance;
+        let delta = self.forward() * distance;
         self.position += delta;
         self.target += delta;
     }

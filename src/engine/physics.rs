@@ -137,8 +137,10 @@ impl GroundCollision {
     pub fn new(model: &AssetModel, transform: Mat4) -> Self {
         let mut triangles = Vec::new();
 
-        for mesh in &model.meshes {
-            let transform = transform * mesh.transform;
+        for render_node in &model.render_nodes {
+            let transform = transform * model.rest_world_transforms[render_node.node as usize];
+
+            let mesh = &model.meshes[render_node.mesh as usize];
             for primitive in &mesh.primitives {
                 for indices in primitive.indices.chunks_exact(3) {
                     let a = transform

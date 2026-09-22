@@ -15,23 +15,8 @@ use crate::{
         store::Handle,
         text::{self, Anchor},
     },
-    game::{Entity, Game},
+    game::Game,
 };
-
-fn animated_transform(entity: &Entity, model: &AssetModel) -> Mat4 {
-    let Some(animation) = entity.animation.as_ref() else {
-        return entity.transform();
-    };
-
-    let Some(clip) = model.animations.get(animation.id) else {
-        log::warn!("Clip missing for animation {:?}", animation.id);
-        return entity.transform();
-    };
-
-    let (translation, rotation, scale) = clip.sample(animation.current_time);
-
-    entity.transform() * Mat4::from_scale_rotation_translation(scale, rotation, translation)
-}
 
 fn create_depth_view(device: &Device, size: PhysicalSize<u32>) -> TextureView {
     let depth_texture = device.create_texture(&TextureDescriptor {
@@ -83,38 +68,77 @@ struct Lighting {
 }
 
 impl Lighting {
-    fn new(device: &Device, transforms_layout: &BindGroupLayout) -> Self {
-        let shadows = Shadows::new(device, transforms_layout);
+    fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
+        let shadows = Shadows::new(device, model_transforms_layout);
 
-        let mut bind_group_layout_entires = vec![BindGroupLayoutEntry {
-            binding: 0,
-            visibility: ShaderStages::FRAGMENT,
-            count: None,
-            ty: BindingType::Buffer {
-                ty: BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: NonZeroU64::new(Light::SIZE as u64),
-            },
-        }];
-        bind_group_layout_entires.extend(shadows.bind_group_layout_entries());
         let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Lighting"),
-            entries: &bind_group_layout_entires,
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(Light::SIZE as u64),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::VERTEX,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Depth,
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Comparison),
+                    count: None,
+                },
+            ],
         });
+
         let buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Lighting"),
             contents: &[0u8; Light::SIZE],
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        let mut bind_group_entries = vec![BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }];
-        bind_group_entries.extend(shadows.bind_group_entries());
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Lighting"),
-            entries: &bind_group_entries,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: shadows.camera.buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::TextureView(&shadows.view),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: BindingResource::Sampler(&shadows.sampler),
+                },
+            ],
             layout: &layout,
         });
 
@@ -146,7 +170,7 @@ struct Shadows {
 impl Shadows {
     const RESOLUTION: u32 = 8192;
 
-    fn new(device: &Device, transforms_layout: &BindGroupLayout) -> Self {
+    fn new(device: &Device, model_transforms_layout: &BindGroupLayout) -> Self {
         let camera_layout = GpuTransform::layout(&device, ShaderStages::VERTEX, Some("Camera"));
         let camera = GpuTransform::new(&device, &camera_layout, Some("Shadow camera"));
 
@@ -173,7 +197,12 @@ impl Shadows {
         });
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Shadow Pipeline Layout"),
-            bind_group_layouts: &[Some(&camera_layout), Some(&transforms_layout)],
+            bind_group_layouts: &[
+                Some(&camera_layout),
+                None,
+                None,
+                Some(&model_transforms_layout),
+            ],
             immediate_size: 0,
         });
         let shader = device.create_shader_module(include_wgsl!("shaders/shadow.wgsl"));
@@ -221,54 +250,6 @@ impl Shadows {
         }
     }
 
-    fn bind_group_entries(&self) -> [BindGroupEntry<'_>; 3] {
-        [
-            BindGroupEntry {
-                binding: 1,
-                resource: self.camera.buffer.as_entire_binding(),
-            },
-            BindGroupEntry {
-                binding: 2,
-                resource: BindingResource::TextureView(&self.view),
-            },
-            BindGroupEntry {
-                binding: 3,
-                resource: BindingResource::Sampler(&self.sampler),
-            },
-        ]
-    }
-
-    fn bind_group_layout_entries(&self) -> [BindGroupLayoutEntry; 3] {
-        [
-            BindGroupLayoutEntry {
-                binding: 1,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 2,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Texture {
-                    sample_type: TextureSampleType::Depth,
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            BindGroupLayoutEntry {
-                binding: 3,
-                visibility: ShaderStages::FRAGMENT,
-                ty: BindingType::Sampler(SamplerBindingType::Comparison),
-                count: None,
-            },
-        ]
-    }
-
     fn render_pass_descriptor(&self) -> RenderPassDescriptor<'_> {
         RenderPassDescriptor {
             label: Some("Shadow"),
@@ -290,17 +271,218 @@ impl Shadows {
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
 #[repr(C)]
-struct Transform {
+struct ModelTransform {
     model: Mat4,
     normal: Mat4,
+    bone_offset: u32,
+    _padding: [u32; 3],
 }
 
-impl Transform {
-    fn new(model: Mat4) -> Self {
+impl ModelTransform {
+    const NO_BONES: u32 = u32::MAX;
+
+    fn skinned(model: Mat4, bone_offset: u32) -> Self {
         Self {
             model,
             normal: model.inverse().transpose(),
+            bone_offset,
+            _padding: [0; 3],
         }
+    }
+
+    fn rigid(model: Mat4) -> Self {
+        Self {
+            model,
+            normal: model.inverse().transpose(),
+            bone_offset: Self::NO_BONES,
+            _padding: [0; 3],
+        }
+    }
+}
+
+struct ModelTransforms {
+    transform_buffer: Buffer,
+    bone_buffer: Buffer,
+    bind_group: BindGroup,
+    layout: BindGroupLayout,
+    model_transforms: Vec<ModelTransform>,
+    bones: Vec<Mat4>,
+
+    transform_capacity: usize,
+    bone_capacity: usize,
+}
+
+impl ModelTransforms {
+    fn new(device: &Device, transform_capacity: usize, bone_capacity: usize) -> Self {
+        let layout = Self::layout(device);
+        let transform_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Skinned Model Transforms"),
+            size: (transform_capacity * size_of::<ModelTransform>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bone_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Bone Buffer"),
+            size: (bone_capacity * std::mem::size_of::<Mat4>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind_group = Self::bind_group(device, &layout, &transform_buffer, &bone_buffer);
+
+        Self {
+            transform_buffer,
+            bind_group,
+            transform_capacity,
+            model_transforms: Vec::with_capacity(transform_capacity),
+            bones: Vec::with_capacity(bone_capacity),
+            layout,
+            bone_buffer,
+            bone_capacity,
+        }
+    }
+
+    fn ensure_capacity(&mut self, device: &Device) {
+        if self.model_transforms.len() > self.transform_capacity {
+            self.transform_capacity = self.model_transforms.len().next_power_of_two();
+            self.transform_buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("Skinned Model Transforms"),
+                size: (self.transform_capacity * std::mem::size_of::<ModelTransform>()) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.bind_group = Self::bind_group(
+                device,
+                &self.layout,
+                &self.transform_buffer,
+                &self.bone_buffer,
+            )
+        }
+        if self.bones.len() > self.bone_capacity {
+            self.bone_capacity = self.bones.len().next_power_of_two();
+            self.bone_buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("Bones"),
+                size: (self.bone_capacity * std::mem::size_of::<Mat4>()) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.bind_group = Self::bind_group(
+                device,
+                &self.layout,
+                &self.transform_buffer,
+                &self.bone_buffer,
+            )
+        }
+    }
+
+    fn add_rigid_model(&mut self, model: &AssetModel, world_transform: Mat4) {
+        for render_node in &model.render_nodes {
+            self.model_transforms.push(ModelTransform::rigid(
+                world_transform * model.rest_world_transforms[render_node.node as usize],
+            ));
+        }
+    }
+
+    fn prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        game: &Game,
+        asset_models: &AssetModelSet,
+    ) {
+        for entity in &game.entities {
+            let entity_transform = entity.transform();
+            let model = asset_models.get(entity.model);
+
+            for render_node in &model.render_nodes {
+                let transform = entity_transform
+                    * entity.animation.pose.world_transforms[render_node.node as usize];
+
+                let model_transform = match render_node.skin {
+                    Some(skin_index) => {
+                        let skin_pose = &entity.animation.skin_poses[skin_index as usize];
+                        let bone_offset = self.bones.len();
+                        self.bones.extend(&skin_pose.matrices);
+
+                        ModelTransform::skinned(transform, bone_offset as u32)
+                    }
+                    None => ModelTransform::rigid(transform),
+                };
+
+                self.model_transforms.push(model_transform);
+            }
+        }
+
+        for object in &game.objects {
+            let model = asset_models.get(object.model);
+            self.add_rigid_model(model, object.transform());
+        }
+
+        let model = asset_models.get(game.terrain.model);
+        self.add_rigid_model(model, game.terrain.transform());
+
+        // This needs to happen after transformations
+        self.ensure_capacity(device);
+
+        queue.write_buffer(
+            &self.transform_buffer,
+            0,
+            bytemuck::cast_slice(&self.model_transforms),
+        );
+        queue.write_buffer(&self.bone_buffer, 0, bytemuck::cast_slice(&self.bones));
+
+        // Prevent reuse of deleted game transforms
+        self.model_transforms.clear();
+        self.bones.clear();
+    }
+
+    fn bind_group(
+        device: &Device,
+        layout: &BindGroupLayout,
+        transform_buffer: &Buffer,
+        bone_buffer: &Buffer,
+    ) -> BindGroup {
+        device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: &layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: transform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: bone_buffer.as_entire_binding(),
+                },
+            ],
+        })
+    }
+
+    fn layout(device: &Device) -> BindGroupLayout {
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Skinned Model Transforms"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(size_of::<ModelTransform>() as u64),
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::VERTEX,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
+                    },
+                    count: None,
+                },
+            ],
+        })
     }
 }
 
@@ -344,106 +526,6 @@ impl GpuTransform {
                     has_dynamic_offset: false,
                     min_binding_size: NonZeroU64::new(size_of::<Mat4>() as u64),
                 },
-            }],
-        })
-    }
-}
-
-struct ModelTransforms {
-    buffer: Buffer,
-    bind_group: BindGroup,
-    layout: BindGroupLayout,
-    transforms: Vec<Transform>,
-    capacity: usize,
-}
-
-impl ModelTransforms {
-    fn new(device: &Device, capacity: usize) -> Self {
-        let layout = Self::layout(device);
-        let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Model Transforms"),
-            size: (capacity * size_of::<Transform>()) as u64,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: &layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        });
-        Self {
-            buffer,
-            bind_group,
-            capacity,
-            transforms: Vec::with_capacity(capacity),
-            layout,
-        }
-    }
-
-    fn ensure_capacity(&mut self, device: &Device) {
-        if self.transforms.len() <= self.capacity {
-            return;
-        }
-
-        let capacity = self.transforms.len().next_power_of_two();
-        let transforms = std::mem::take(&mut self.transforms);
-        let mut new = Self::new(device, capacity);
-        new.transforms = transforms;
-        *self = new;
-    }
-    #[inline(always)]
-    fn add_model(&mut self, model: &AssetModel, transform: Mat4) {
-        self.transforms.extend(
-            model
-                .meshes
-                .iter()
-                .map(|mesh| Transform::new(transform * mesh.transform)),
-        );
-    }
-
-    fn prepare(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        game: &Game,
-        asset_models: &AssetModelSet,
-    ) {
-        for entity in &game.entities {
-            let model = asset_models.get(entity.model);
-            let transform = animated_transform(entity, model);
-            self.add_model(model, transform);
-        }
-        for object in &game.objects {
-            let model = asset_models.get(object.model);
-            self.add_model(model, object.transform());
-        }
-        let model = asset_models.get(game.terrain.model);
-        self.add_model(model, game.terrain.transform());
-
-        // This needs to happen after transformations
-        self.ensure_capacity(device);
-
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&self.transforms));
-
-        // Prevent reuse of deleted game transforms
-        self.transforms.clear();
-    }
-
-    fn layout(device: &Device) -> BindGroupLayout {
-        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Model Transforms"),
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(size_of::<Transform>() as u64),
-                },
-                count: None,
             }],
         })
     }
@@ -733,16 +815,31 @@ pub struct Vertex {
     position: Vec3,
     normal: Vec3,
     uv: Vec2,
+    joints: [u16; 4],
+    weights: [f32; 4],
 }
 impl Vertex {
-    const ATTRIBUTES: [VertexAttribute; 3] =
-        vertex_attr_array![0 => Float32x3, 1 => Float32x3 ,2 => Float32x2];
+    const ATTRIBUTES: [VertexAttribute; 5] = vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x3,
+        2 => Float32x2,
+        3 => Uint16x4,
+        4 => Float32x4
+    ];
 
-    pub fn new(position: Vec3, normal: Vec3, uv: Vec2) -> Self {
+    pub fn new(
+        position: Vec3,
+        normal: Vec3,
+        uv: Vec2,
+        joints: [u16; 4],
+        weights: [f32; 4],
+    ) -> Self {
         Self {
             position,
             normal,
             uv,
+            joints,
+            weights,
         }
     }
 
@@ -879,12 +976,12 @@ impl TextBuffer {
                 None,
             );
             self.inner.shape_until_scroll(font_system, false);
-
             self.text_width = self
                 .inner
                 .layout_runs()
                 .map(|run| run.line_w)
                 .fold(0.0, f32::max);
+
             self.generation = text.generation();
         }
     }
@@ -956,7 +1053,7 @@ impl Text {
 
             let position = world_to_screen(
                 view_projection,
-                entity.position() + Vec3::Y * 1.5,
+                entity.position() + Vec3::new(0.5, 2.5, 0.0),
                 width,
                 height,
             )
@@ -1044,11 +1141,12 @@ pub struct Gpu {
     device: Device,
     queue: Queue,
 
-    render_pipeline: RenderPipeline,
+    scene_pipeline: RenderPipeline,
     depth_view: TextureView,
 
     camera: Camera,
     model_transforms: ModelTransforms,
+
     lighting: Lighting,
     sky: Sky,
     text: Text,
@@ -1075,7 +1173,7 @@ impl Gpu {
         let camera = Camera::new(&device);
         let sky = Sky::new(&device, &surface_config);
 
-        let model_transforms = ModelTransforms::new(&device, 64);
+        let model_transforms = ModelTransforms::new(&device, 64, 256);
 
         let lighting = Lighting::new(&device, &model_transforms.layout);
         let material_layout = Material::layout(&device);
@@ -1091,7 +1189,7 @@ impl Gpu {
             immediate_size: 0,
         });
         let shader = device.create_shader_module(include_wgsl!("shaders/main.wgsl"));
-        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        let scene_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: VertexState {
@@ -1137,7 +1235,7 @@ impl Gpu {
             surface_config,
             device,
             queue,
-            render_pipeline,
+            scene_pipeline,
             material_layout,
             depth_view,
             camera,
@@ -1185,7 +1283,7 @@ impl Gpu {
 
         shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
         shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
-        shadow_pass.set_bind_group(1, &self.model_transforms.bind_group, &[]);
+        shadow_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
         let transform_index = &mut 0;
         for entity in &game.entities {
@@ -1202,6 +1300,7 @@ impl Gpu {
             .get(game.terrain.model)
             .draw_shadow(&mut shadow_pass, transform_index);
     }
+
     fn render_scene(
         &self,
         encoder: &mut CommandEncoder,
@@ -1222,7 +1321,7 @@ impl Gpu {
         let mut render_pass =
             encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
 
-        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_pipeline(&self.scene_pipeline);
         render_pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
         render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
         render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);

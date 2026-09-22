@@ -1,4 +1,3 @@
-
 #[derive(Debug)]
 pub struct Handle<T> {
     index: u32,
@@ -87,5 +86,3 @@ impl<T> Store<T> {
         self.slots.len()
     }
 }
-
-

@@ -16,30 +16,13 @@ use crate::{
         store::{Handle, Store},
         text::{self, Text},
     },
-    game::animation::AnimationId,
+    game::animation::{Animation, AnimationId},
     input::Input,
 };
 
 #[inline(always)]
 fn transform(position: Vec3, rotation: Quat, scale: Vec3) -> Mat4 {
     Mat4::from_translation(position) * Mat4::from_quat(rotation) * Mat4::from_scale(scale)
-}
-
-pub struct Animation {
-    pub id: AnimationId,
-    pub current_time: f32,
-    /// None means the animation will loop forever
-    duration: Option<f32>,
-}
-
-impl Animation {
-    pub const fn new(id: AnimationId, duration: Option<f32>) -> Self {
-        Self {
-            current_time: 0.0,
-            duration,
-            id,
-        }
-    }
 }
 
 pub struct Entity {
@@ -49,23 +32,24 @@ pub struct Entity {
     velocity: Vec3,
     grounded: bool,
     bounding_box: BoundingBox,
+    pub animation: Animation,
     pub nameplate: Option<Handle<Text>>,
-    pub animation: Option<Animation>,
     pub model: ModelId,
 }
 
 impl Entity {
     pub fn new(assets: &AssetModelSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
+        let asset = assets.get(model);
         Self {
             position,
             rotation: Quat::IDENTITY,
             scale,
             velocity: Vec3::ZERO,
             grounded: false,
-            animation: None,
             nameplate: None,
             model,
-            bounding_box: assets.get(model).bounding_box,
+            bounding_box: asset.bounding_box,
+            animation: Animation::new(asset),
         }
     }
 
@@ -89,14 +73,14 @@ impl Entity {
         }
     }
 
-    pub const fn jump(&mut self, velocity: f32) {
+    fn jump(&mut self, velocity: f32) {
         if !self.grounded {
             return;
         }
 
         self.grounded = false;
         self.velocity.y = velocity;
-        self.animation = Some(Animation::new(AnimationId::Jump, None));
+        self.animation.play(AnimationId::Jump);
     }
 
     #[inline(always)]
@@ -123,30 +107,14 @@ impl Entity {
         self.grounded = true;
 
         // TODO: This needs some thought
-        if let Some(ref animation) = self.animation {
-            if animation.id == AnimationId::Jump {
-                self.animation = None;
-            }
+        if self.animation.id() == AnimationId::Jump {
+            self.animation.play(AnimationId::Idle);
         }
     }
 
     #[inline(always)]
     fn apply_gravity(&mut self, delta_time: f32) {
         self.velocity += GRAVITY * delta_time;
-    }
-
-    const fn animate(&mut self, delta_time: f32) {
-        let Some(animation) = &mut self.animation else {
-            return;
-        };
-
-        animation.current_time += delta_time;
-
-        if let Some(duration) = animation.duration {
-            if animation.current_time >= duration {
-                self.animation = None
-            }
-        }
     }
 
     #[inline(always)]
@@ -320,10 +288,10 @@ impl Game {
         // Movement is relative to camera direction
         let mut movement = Vec3::ZERO;
         if self.input.is_pressed(KeyCode::KeyW) {
-            movement += camera.forward_planar();
+            movement += camera.forward();
         }
         if self.input.is_pressed(KeyCode::KeyS) {
-            movement -= camera.forward_planar()
+            movement -= camera.forward()
         }
         if self.input.is_pressed(KeyCode::KeyA) {
             movement -= camera.right()
@@ -335,7 +303,7 @@ impl Game {
             player.jump(8.0);
         }
         if self.input.is_pressed(KeyCode::Digit0) {
-            player.animation = Some(Animation::new(AnimationId::Wave, None));
+            player.animation.play_loop(AnimationId::Wave)
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(delta_time * 10.0)
@@ -370,14 +338,15 @@ impl Game {
         false
     }
 
-    pub fn update(&mut self, delta_time: f32) {
+    pub fn update(&mut self, delta_time: f32, assets: &AssetModelSet) {
         self.texts
             .get_mut(self.fps)
             .unwrap()
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
-            entity.animate(delta_time);
+            let asset = assets.get(entity.model);
+            entity.animation.update(delta_time, asset);
             entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
         }
     }
