@@ -11,8 +11,8 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     assets::{self, AssetModel, AssetModelSet, ModelId},
     engine::{
-        store::Handle,
         light::Light,
+        store::Handle,
         text::{self, Anchor},
     },
     game::{Entity, Game},
@@ -176,7 +176,7 @@ impl Shadows {
             bind_group_layouts: &[Some(&camera_layout), Some(&transforms_layout)],
             immediate_size: 0,
         });
-        let shader = device.create_shader_module(include_wgsl!("../shaders/shadow.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("shaders/shadow.wgsl"));
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Shadow Pipeline"),
             layout: Some(&pipeline_layout),
@@ -801,7 +801,7 @@ impl Sky {
             bind_group_layouts: &[Some(&camera_layout)],
             immediate_size: 0,
         });
-        let shader = device.create_shader_module(include_wgsl!("../shaders/sky.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("shaders/sky.wgsl"));
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label,
             layout: Some(&pipeline_layout),
@@ -1090,7 +1090,7 @@ impl Gpu {
             ],
             immediate_size: 0,
         });
-        let shader = device.create_shader_module(include_wgsl!("../shaders/main.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("shaders/main.wgsl"));
         let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
