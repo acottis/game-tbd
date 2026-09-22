@@ -18,14 +18,20 @@ impl BoundingBox {
 
         for mesh in &model.meshes {
             for primitive in &mesh.primitives {
-                min = min.min(primitive.bounding_box.min.into());
-                max = max.max(primitive.bounding_box.max.into());
+                let bbox = BoundingBox {
+                    min: primitive.bounding_box.min.into(),
+                    max: primitive.bounding_box.max.into(),
+                };
+
+                let bbox = bbox.transform(mesh.transform);
+
+                min = min.min(bbox.min);
+                max = max.max(bbox.max);
             }
         }
 
         Self { min, max }
     }
-
     pub fn sweep(&self, movement: Vec3, other: &BoundingBox) -> Option<(f32, Vec3)> {
         let mut entry_time = Vec3::splat(f32::NEG_INFINITY);
         let mut exit_time = Vec3::splat(f32::INFINITY);

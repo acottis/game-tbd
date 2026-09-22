@@ -8,9 +8,16 @@ use glyphon::Color;
 use winit::keyboard::KeyCode;
 
 use crate::{
-    assets::{AssetModel, AssetModelSet, ModelId}, engine::{
-        camera::Camera, light::Light, physics::{BoundingBox, GRAVITY, GroundCollision}, store::{Handle, Store}, text::{self, Text},
-    }, game::animation::AnimationId, input::Input,
+    assets::{AssetModel, AssetModelSet, ModelId},
+    engine::{
+        camera::Camera,
+        light::Light,
+        physics::{BoundingBox, GRAVITY, GroundCollision},
+        store::{Handle, Store},
+        text::{self, Text},
+    },
+    game::animation::AnimationId,
+    input::Input,
 };
 
 #[inline(always)]
@@ -104,8 +111,9 @@ impl Entity {
             return;
         };
 
-        if self.velocity.y <= 0.0 && self.bounds().min.y <= height {
-            self.position.y += height - self.bounds().min.y;
+        let bounds = self.bounds();
+        if self.velocity.y <= 0.0 && bounds.min.y <= height {
+            self.position.y += height - bounds.min.y;
             self.ground();
         }
     }
@@ -261,10 +269,10 @@ impl Game {
         );
 
         let mut player = Entity::new(
-            ModelId::Foo,
+            ModelId::Sabine,
             Vec3::ZERO,
-            Vec3::splat(0.3),
-            BoundingBox::new(assets.get(ModelId::Foo)),
+            Vec3::ONE,
+            BoundingBox::new(assets.get(ModelId::Sabine)),
         );
 
         let platform = Object::new(
@@ -278,7 +286,7 @@ impl Game {
         let terrain = Terrain::new(
             ModelId::Ground,
             Vec3::ZERO,
-            Vec3::new(200.0, 150.0, 200.0),
+            Vec3::new(100.0, 75.0, 100.0),
             ground_asset,
         );
 

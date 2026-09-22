@@ -33,7 +33,7 @@ impl Camera {
             aspect: window_size.width as f32 / window_size.height as f32,
             near: 0.01,
             // TODO: Think about this
-            far: 1000.0,
+            far: 100.0,
         }
     }
 

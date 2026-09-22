@@ -17,10 +17,11 @@ pub enum ModelId {
     Cube,
     Platform,
     Ground,
+    Sabine,
 }
 
 impl ModelId {
-    pub const COUNT: usize = 5;
+    pub const COUNT: usize = 6;
 }
 
 impl TryFrom<&Path> for ModelId {
@@ -44,6 +45,7 @@ impl TryFrom<&Path> for ModelId {
             "cube" => Ok(Self::Cube),
             "platform" => Ok(Self::Platform),
             "ground" => Ok(Self::Ground),
+            "sabine" => Ok(Self::Sabine),
             _ => Err(format!("unknown model '{name}': {}", path.display())),
         }
     }

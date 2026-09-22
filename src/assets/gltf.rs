@@ -110,10 +110,11 @@ fn load_mesh(meshes: &mut Vec<Mesh>, mesh: gltf::Mesh, transform: Mat4, buffer: 
             index_buffer.push(index);
         }
 
+        let bounding_box = primitive.bounding_box();
         primitives.push(Primitive::new(
             vertex_buffer,
             index_buffer,
-            primitive.bounding_box(),
+            bounding_box,
             primitive.material().index(),
         ));
     }
@@ -179,8 +180,9 @@ mod tests {
 
     #[test]
     fn load_assets() {
-        load("assets/foo.glb");
-        load("assets/cube.glb");
-        load("assets/ground.glb");
+        // load("assets/foo.glb");
+        // load("assets/cube.glb");
+        // load("assets/ground.glb");
+        load("assets/sabine.glb");
     }
 }
