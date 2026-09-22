@@ -12,15 +12,13 @@ use crate::{engine::physics::BoundingBox, game::animation::AnimationSet, graphic
 #[repr(u8)]
 pub enum ModelId {
     Foo = 0,
-    BoxTextured,
-    Cube,
     Platform,
     Ground,
     Sabine,
 }
 
 impl ModelId {
-    pub const COUNT: usize = 6;
+    pub const COUNT: usize = 4;
 }
 
 impl TryFrom<&Path> for ModelId {
@@ -40,8 +38,6 @@ impl TryFrom<&Path> for ModelId {
 
         match name {
             "foo" => Ok(Self::Foo),
-            "BoxTextured" => Ok(Self::BoxTextured),
-            "cube" => Ok(Self::Cube),
             "platform" => Ok(Self::Platform),
             "ground" => Ok(Self::Ground),
             "sabine" => Ok(Self::Sabine),
@@ -94,7 +90,11 @@ impl AssetModelSet {
             assets[model_id as usize] = Some(load(&path));
         }
 
-        let assets = assets.into_iter().map(Option::unwrap).collect();
+        let assets = assets
+            .into_iter()
+            .enumerate()
+            .map(|(i, asset)| asset.expect(&format!("Asset Missing. ModelId: {i}")))
+            .collect();
         Self(assets)
     }
 
