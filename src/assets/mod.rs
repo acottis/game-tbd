@@ -2,12 +2,11 @@ mod gltf;
 
 use std::path::Path;
 
-use ::gltf::mesh::BoundingBox;
 use glam::Mat4;
 pub use gltf::load;
 use image::DynamicImage;
 
-use crate::{game::animation::AnimationSet, graphics::Vertex};
+use crate::{engine::physics::BoundingBox, game::animation::AnimationSet, graphics::Vertex};
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
@@ -73,6 +72,7 @@ pub struct AssetModel {
     pub meshes: Vec<Mesh>,
     pub animations: AnimationSet,
     pub materials: Vec<Material>,
+    pub bounding_box: BoundingBox,
 }
 pub struct AssetModelSet(pub Vec<AssetModel>);
 
@@ -105,6 +105,7 @@ impl AssetModelSet {
 
 pub struct Mesh {
     pub primitives: Vec<Primitive>,
+    pub bounding_box: BoundingBox,
     pub transform: Mat4,
 }
 
@@ -112,21 +113,14 @@ pub struct Mesh {
 pub struct Primitive {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub bounding_box: BoundingBox,
     pub material: Option<usize>,
 }
 
 impl Primitive {
-    pub fn new(
-        vertices: Vec<Vertex>,
-        indices: Vec<u32>,
-        bounding_box: BoundingBox,
-        material: Option<usize>,
-    ) -> Self {
+    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Option<usize>) -> Self {
         Self {
             vertices,
             indices,
-            bounding_box,
             material,
         }
     }

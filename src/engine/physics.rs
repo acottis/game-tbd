@@ -6,32 +6,26 @@ use crate::assets::AssetModel;
 
 pub const GRAVITY: Vec3 = Vec3::new(0.0, -9.81, 0.0);
 
+#[derive(Clone, Copy)]
 pub struct BoundingBox {
     pub min: Vec3,
     pub max: Vec3,
 }
 
 impl BoundingBox {
-    pub fn new(model: &AssetModel) -> Self {
-        let mut min = Vec3::splat(f32::INFINITY);
-        let mut max = Vec3::splat(f32::NEG_INFINITY);
-
-        for mesh in &model.meshes {
-            for primitive in &mesh.primitives {
-                let bbox = BoundingBox {
-                    min: primitive.bounding_box.min.into(),
-                    max: primitive.bounding_box.max.into(),
-                };
-
-                let bbox = bbox.transform(mesh.transform);
-
-                min = min.min(bbox.min);
-                max = max.max(bbox.max);
-            }
-        }
-
+    pub fn empty() -> Self {
+        let min = Vec3::splat(f32::INFINITY);
+        let max = Vec3::splat(f32::NEG_INFINITY);
         Self { min, max }
     }
+
+    pub fn union(&self, other: Self) -> Self {
+        Self {
+            min: self.min.min(other.min),
+            max: self.max.max(other.max),
+        }
+    }
+
     pub fn sweep(&self, movement: Vec3, other: &BoundingBox) -> Option<(f32, Vec3)> {
         let mut entry_time = Vec3::splat(f32::NEG_INFINITY);
         let mut exit_time = Vec3::splat(f32::INFINITY);
@@ -144,6 +138,7 @@ impl GroundCollision {
         let mut triangles = Vec::new();
 
         for mesh in &model.meshes {
+            let transform = transform * mesh.transform;
             for primitive in &mesh.primitives {
                 for indices in primitive.indices.chunks_exact(3) {
                     let a = transform

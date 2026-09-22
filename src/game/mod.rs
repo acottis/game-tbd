@@ -8,7 +8,7 @@ use glyphon::Color;
 use winit::keyboard::KeyCode;
 
 use crate::{
-    assets::{AssetModel, AssetModelSet, ModelId},
+    assets::{AssetModelSet, ModelId},
     engine::{
         camera::Camera,
         light::Light,
@@ -55,7 +55,7 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn new(model: ModelId, position: Vec3, scale: Vec3, bounding_box: BoundingBox) -> Self {
+    pub fn new(assets: &AssetModelSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
         Self {
             position,
             rotation: Quat::IDENTITY,
@@ -65,7 +65,7 @@ impl Entity {
             animation: None,
             nameplate: None,
             model,
-            bounding_box,
+            bounding_box: assets.get(model).bounding_box,
         }
     }
 
@@ -193,10 +193,11 @@ pub struct Terrain {
 }
 
 impl Terrain {
-    pub fn new(model: ModelId, position: Vec3, scale: Vec3, asset: &AssetModel) -> Self {
+    pub fn new(assets: &AssetModelSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
         let rotation = Quat::IDENTITY;
 
         let transform = transform(position, rotation, scale);
+        let asset = assets.get(model);
         let collider = GroundCollision::new(asset, transform);
         Self {
             position,
@@ -221,13 +222,13 @@ pub struct Object {
     pub model: ModelId,
 }
 impl Object {
-    pub fn new(model: ModelId, position: Vec3, scale: Vec3, bounding_box: BoundingBox) -> Self {
+    pub fn new(assets: &AssetModelSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
         Self {
             position,
             rotation: Quat::IDENTITY,
             scale,
             model,
-            bounding_box,
+            bounding_box: assets.get(model).bounding_box,
         }
     }
 
@@ -268,26 +269,13 @@ impl Game {
             0.1,
         );
 
-        let mut player = Entity::new(
-            ModelId::Sabine,
-            Vec3::ZERO,
-            Vec3::ONE,
-            BoundingBox::new(assets.get(ModelId::Sabine)),
-        );
-
-        let platform = Object::new(
-            ModelId::Platform,
-            Vec3::Y * 2.0,
-            Vec3::ONE,
-            BoundingBox::new(assets.get(ModelId::Platform)),
-        );
-
-        let ground_asset = assets.get(ModelId::Ground);
+        let mut player = Entity::new(assets, ModelId::Sabine, Vec3::ZERO, Vec3::splat(2.0));
+        let platform = Object::new(assets, ModelId::Platform, Vec3::Y * 2.0, Vec3::ONE);
         let terrain = Terrain::new(
+            assets,
             ModelId::Ground,
             Vec3::ZERO,
             Vec3::new(100.0, 75.0, 100.0),
-            ground_asset,
         );
 
         let mut texts = Store::new();

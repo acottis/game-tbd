@@ -9,6 +9,7 @@ use image::{DynamicImage, ImageFormat};
 use crate::assets::AssetModel;
 use crate::assets::{Material, Mesh, Primitive};
 use crate::engine::animation::{AnimationClip, Rotation, Scale, Translation};
+use crate::engine::physics::BoundingBox;
 use crate::game::animation::{AnimationId, AnimationSet};
 use crate::graphics::Vertex;
 
@@ -86,6 +87,8 @@ fn load_animations(document: &Document, buffer: &[Data]) -> AnimationSet {
 
 fn load_mesh(meshes: &mut Vec<Mesh>, mesh: gltf::Mesh, transform: Mat4, buffer: &[Data]) {
     let mut primitives = Vec::new();
+    let mut bounding_box = BoundingBox::empty();
+
     for primitive in mesh.primitives() {
         let mut vertex_buffer = Vec::new();
         let mut index_buffer = Vec::new();
@@ -110,17 +113,23 @@ fn load_mesh(meshes: &mut Vec<Mesh>, mesh: gltf::Mesh, transform: Mat4, buffer: 
             index_buffer.push(index);
         }
 
-        let bounding_box = primitive.bounding_box();
+        let bbox = primitive.bounding_box();
+        let bbox = BoundingBox {
+            min: bbox.min.into(),
+            max: bbox.max.into(),
+        };
+        bounding_box = bounding_box.union(bbox.transform(transform));
+
         primitives.push(Primitive::new(
             vertex_buffer,
             index_buffer,
-            bounding_box,
             primitive.material().index(),
         ));
     }
     meshes.push(Mesh {
         primitives,
         transform,
+        bounding_box,
     })
 }
 
@@ -167,10 +176,16 @@ pub fn load(path: impl AsRef<Path>) -> AssetModel {
     let animations = load_animations(&document, &buffer);
     let materials = load_materials(&document, &buffer);
 
+    let mut bounding_box = BoundingBox::empty();
+    for mesh in &meshes {
+        bounding_box = bounding_box.union(mesh.bounding_box);
+    }
+
     AssetModel {
         meshes,
         animations,
         materials,
+        bounding_box,
     }
 }
 
