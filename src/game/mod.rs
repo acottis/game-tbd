@@ -121,7 +121,13 @@ impl Entity {
     fn ground(&mut self) {
         self.velocity.y = 0.0;
         self.grounded = true;
-        self.animation = None;
+
+        // TODO: This needs some thought
+        if let Some(ref animation) = self.animation {
+            if animation.id == AnimationId::Jump {
+                self.animation = None;
+            }
+        }
     }
 
     #[inline(always)]
@@ -326,7 +332,10 @@ impl Game {
             movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(9.0);
+            player.jump(8.0);
+        }
+        if self.input.is_pressed(KeyCode::Digit0) {
+            player.animation = Some(Animation::new(AnimationId::Wave, None));
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(delta_time * 10.0)

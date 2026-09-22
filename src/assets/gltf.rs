@@ -175,6 +175,7 @@ pub fn load(path: impl AsRef<Path>) -> AssetModel {
 
     let animations = load_animations(&document, &buffer);
     let materials = load_materials(&document, &buffer);
+    println!("{:?}", animations);
 
     let mut bounding_box = BoundingBox::empty();
     for mesh in &meshes {

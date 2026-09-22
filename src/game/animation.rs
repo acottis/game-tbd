@@ -1,6 +1,6 @@
 use crate::engine::animation::AnimationClip;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(usize)]
 pub enum AnimationId {
     Jump = 0,
@@ -23,6 +23,7 @@ impl TryFrom<&str> for AnimationId {
     }
 }
 
+#[derive(Debug)]
 pub struct AnimationSet([Option<AnimationClip>; AnimationId::COUNT]);
 
 impl AnimationSet {
