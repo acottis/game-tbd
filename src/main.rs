@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use game::Game;
 use winit::{
@@ -13,11 +13,44 @@ mod assets;
 mod engine;
 mod game;
 mod graphics;
+mod input;
 
-use crate::{assets::AssetModelSet, engine::Engine};
+use crate::assets::{AssetModel, AssetModelSet};
+
+pub struct Renderer {
+    pub window: Arc<Window>,
+    pub gpu: graphics::Gpu,
+    pub models: graphics::ModelSet,
+}
+
+impl Renderer {
+    pub fn new(window: Window, assets: &[AssetModel]) -> Self {
+        let window = Arc::new(window);
+        let mut gpu = graphics::Gpu::new(window.clone());
+        gpu.resize(window.inner_size());
+
+        let models = graphics::ModelSet::load(&gpu, &assets);
+
+        Self {
+            window,
+            gpu,
+            models,
+        }
+    }
+
+    #[inline(always)]
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        self.gpu.resize(size);
+    }
+
+    #[inline(always)]
+    pub fn render(&mut self, game: &Game, assets: &AssetModelSet) {
+        self.gpu.render(&self.window, game, &self.models, assets);
+    }
+}
 
 struct App {
-    state: Option<Engine>,
+    renderer: Option<Renderer>,
     game: Game,
     assets: AssetModelSet,
     last_frame_time: Instant,
@@ -28,7 +61,7 @@ impl App {
     fn new() -> Self {
         let assets = AssetModelSet::load();
         Self {
-            state: None,
+            renderer: None,
             game: Game::new(&assets),
             assets,
             last_frame_time: Instant::now(),
@@ -37,13 +70,13 @@ impl App {
     }
 
     fn init(&mut self, window: Window) {
-        self.state = Some(Engine::new(window, &self.assets.0));
+        self.renderer = Some(Renderer::new(window, &self.assets.0));
     }
 
     #[inline(always)]
     fn render(&mut self) {
-        let state = unsafe { self.state.as_mut().unwrap_unchecked() };
-        state.render(&self.game, &self.assets);
+        let renderer = unsafe { self.renderer.as_mut().unwrap_unchecked() };
+        renderer.render(&self.game, &self.assets);
     }
 
     #[inline(always)]
@@ -51,8 +84,8 @@ impl App {
         if size.width == 0 || size.height == 0 {
             return;
         }
-        let state = unsafe { self.state.as_mut().unwrap_unchecked() };
-        state.resize(size);
+        let renderer = unsafe { self.renderer.as_mut().unwrap_unchecked() };
+        renderer.resize(size);
         self.game.camera.set_aspect_ratio(&size);
     }
 

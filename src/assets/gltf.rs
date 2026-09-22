@@ -6,10 +6,11 @@ use gltf::animation::util::ReadOutputs;
 use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
+use crate::assets::AssetModel;
 use crate::assets::{Material, Mesh, Primitive};
-use crate::game::animation::{AnimationId, AnimationSet, Rotation, Scale, Translation};
+use crate::engine::animation::{AnimationClip, Rotation, Scale, Translation};
+use crate::game::animation::{AnimationId, AnimationSet};
 use crate::graphics::Vertex;
-use crate::{assets::AssetModel, game::animation::AnimationClip};
 
 fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
     if let Some(info) = info {

@@ -1,30 +1,17 @@
+pub mod animation;
+
 use std::f32::consts::PI;
 
 use glam::{Mat4, Quat, Vec3};
 
 use glyphon::Color;
-use physics::GRAVITY;
 use winit::keyboard::KeyCode;
 
 use crate::{
-    assets::{AssetModel, AssetModelSet, ModelId},
-    engine::{Handle, Store},
-    game::{
-        animation::AnimationId,
-        camera::Camera,
-        input::Input,
-        light::Light,
-        physics::{BoundingBox, GroundCollision},
-        text::{Anchor, Text},
-    },
+    assets::{AssetModel, AssetModelSet, ModelId}, engine::{
+        camera::Camera, light::Light, physics::{BoundingBox, GRAVITY, GroundCollision}, store::{Handle, Store}, text::{self, Text},
+    }, game::animation::AnimationId, input::Input,
 };
-
-pub mod animation;
-mod camera;
-pub mod input;
-pub mod light;
-mod physics;
-pub mod text;
 
 #[inline(always)]
 fn transform(position: Vec3, rotation: Quat, scale: Vec3) -> Mat4 {
@@ -299,14 +286,14 @@ impl Game {
 
         let player_nameplate = texts.create(Text::new(
             Color::rgb(255, 255, 255),
-            Anchor::Left,
+            text::Anchor::Left,
             "Foo Nameplate 🦀",
         ));
         player.set_nameplate(player_nameplate);
 
         let fps = texts.create(Text::new(
             Color::rgb(255, 255, 255),
-            Anchor::Right,
+            text::Anchor::Right,
             "FPS: 0.0",
         ));
 

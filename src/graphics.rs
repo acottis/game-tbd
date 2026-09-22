@@ -10,8 +10,12 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     assets::{self, AssetModel, AssetModelSet, ModelId},
-    engine::Handle,
-    game::{self, Entity, Game, light::Light, text::Anchor},
+    engine::{
+        store::Handle,
+        light::Light,
+        text::{self, Anchor},
+    },
+    game::{Entity, Game},
 };
 
 fn animated_transform(entity: &Entity, model: &AssetModel) -> Mat4 {
@@ -841,12 +845,12 @@ impl Sky {
 }
 
 struct TextDraw {
-    text: Handle<game::text::Text>,
+    text: Handle<text::Text>,
     position: Vec2,
 }
 
 impl TextDraw {
-    fn new(text: Handle<game::text::Text>, position: Vec2) -> Self {
+    fn new(text: Handle<text::Text>, position: Vec2) -> Self {
         Self { text, position }
     }
 }
@@ -866,7 +870,7 @@ impl TextBuffer {
         }
     }
 
-    fn update(&mut self, font_system: &mut glyphon::FontSystem, text: &game::text::Text) {
+    fn update(&mut self, font_system: &mut glyphon::FontSystem, text: &text::Text) {
         if text.generation() != self.generation {
             self.inner.set_text(
                 &text.text,
@@ -987,7 +991,7 @@ impl Text {
 
     fn text_area<'a>(
         buffer: &'a TextBuffer,
-        text: &game::text::Text,
+        text: &text::Text,
         position: Vec2,
         width: u32,
         height: u32,
