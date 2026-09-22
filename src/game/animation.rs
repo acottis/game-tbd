@@ -4,6 +4,11 @@ use crate::engine::animation::AnimationClip;
 #[repr(usize)]
 pub enum AnimationId {
     Jump = 0,
+    Wave,
+}
+
+impl AnimationId {
+    const COUNT: usize = 2;
 }
 
 impl TryFrom<&str> for AnimationId {
@@ -12,12 +17,13 @@ impl TryFrom<&str> for AnimationId {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "jump" => Ok(Self::Jump),
+            "wave" => Ok(Self::Wave),
             _ => Err(format!("Invalid Animation ID: {value}")),
         }
     }
 }
 
-pub struct AnimationSet([Option<AnimationClip>; 1]);
+pub struct AnimationSet([Option<AnimationClip>; AnimationId::COUNT]);
 
 impl AnimationSet {
     pub fn new() -> Self {

@@ -269,8 +269,8 @@ impl Game {
             0.1,
         );
 
-        let mut player = Entity::new(assets, ModelId::Sabine, Vec3::ZERO, Vec3::splat(2.0));
-        let platform = Object::new(assets, ModelId::Platform, Vec3::Y * 2.0, Vec3::ONE);
+        let mut player = Entity::new(assets, ModelId::Sabine, Vec3::ZERO, Vec3::ONE);
+        let platform = Object::new(assets, ModelId::Platform, Vec3::Y * 3.0, Vec3::ONE);
         let terrain = Terrain::new(
             assets,
             ModelId::Ground,
@@ -326,7 +326,7 @@ impl Game {
             movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
-            player.jump(7.5);
+            player.jump(9.0);
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(delta_time * 10.0)
