@@ -22,7 +22,6 @@ struct App {
     game: Game,
     assets: AssetSet,
     last_frame_time: Instant,
-    delta_time: f32,
 }
 
 impl App {
@@ -33,12 +32,7 @@ impl App {
             game: Game::new(&assets),
             assets,
             last_frame_time: Instant::now(),
-            delta_time: 0.0,
         }
-    }
-
-    fn init(&mut self, window: Window) {
-        self.renderer = Some(Renderer::new(window, &self.assets.0));
     }
 
     #[inline(always)]
@@ -63,7 +57,9 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = Window::default_attributes().with_title("WIP: Game");
         let window = event_loop.create_window(window_attributes).unwrap();
-        self.init(window);
+        self.renderer = Some(Renderer::new(window, &self.assets.0));
+        // Ensure we have a sane last_frame_time
+        self.last_frame_time = Instant::now();
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -74,13 +70,14 @@ impl ApplicationHandler for App {
         //     return;
         // }
         self.last_frame_time = now;
-        self.delta_time = delta.as_secs_f32();
+        let delta_time = delta.as_secs_f32();
 
-        log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
+        log::debug!("FPS: {}, DT: {}", 1.0 / delta_time, delta_time);
 
-        let should_exit = self.game.update(self.delta_time, &self.assets);
+        let should_exit = self.game.update(delta_time, &self.assets);
         if should_exit {
-            event_loop.exit()
+            event_loop.exit();
+            return;
         }
         self.render();
         self.game.input.pressed_keys.clear();
