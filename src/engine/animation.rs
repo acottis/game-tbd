@@ -1,7 +1,7 @@
 use glam::{Mat4, Quat, Vec3};
 use gltf::animation::Interpolation;
 
-use crate::assets::AssetModel;
+use crate::assets::{Asset, NodeId};
 
 // TODO: Perf
 fn keyframes(times: &[f32], time: f32) -> (usize, usize, f32) {
@@ -147,7 +147,7 @@ impl AnimationClip {
 
 #[derive(Debug, Clone)]
 pub struct Joint {
-    pub node: u32,
+    pub node: NodeId,
     pub inverse_bind: Mat4,
 }
 
@@ -193,7 +193,7 @@ impl Pose {
         }
     }
 
-    pub fn update(&mut self, asset: &AssetModel, animation: &AnimationClip, mut time: f32) {
+    pub fn update(&mut self, asset: &Asset, animation: &AnimationClip, mut time: f32) {
         // Loop animation if run for longer than duration
         if animation.duration > 0.0 {
             time %= animation.duration;

@@ -8,7 +8,7 @@ use glyphon::Color;
 use winit::keyboard::KeyCode;
 
 use crate::{
-    assets::{AssetModelSet, ModelId},
+    assets::{Asset, AssetSet, ModelId, RenderNode},
     engine::{
         camera::Camera,
         light::Light,
@@ -33,13 +33,14 @@ pub struct Entity {
     speed: f32,
     grounded: bool,
     bounding_box: BoundingBox,
+    pub visible_render_nodes: Vec<bool>,
     pub animation: Animation,
     pub nameplate: Option<Handle<Text>>,
     pub model: ModelId,
 }
 
 impl Entity {
-    pub fn new(assets: &AssetModelSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
+    pub fn new(assets: &AssetSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
         let asset = assets.get(model);
         Self {
             position,
@@ -52,6 +53,7 @@ impl Entity {
             bounding_box: asset.bounding_box,
             animation: Animation::new(asset),
             speed: 4.0,
+            visible_render_nodes: vec![false; asset.render_nodes.len()],
         }
     }
 
@@ -91,7 +93,7 @@ impl Entity {
     }
 
     fn check_terrain_collision(&mut self, terrain: &GroundCollision) {
-        // None means OOB
+        // None means Out Of Bounds
         let Some(height) = terrain.height_at(self.position) else {
             log::warn!("You are out of bounds!");
             return;
@@ -158,6 +160,21 @@ impl Entity {
         self.position += self.velocity * delta_time;
         self.check_terrain_collision(&ground);
     }
+
+    pub fn visible_render_nodes<'a>(
+        &'a self,
+        asset: &'a Asset,
+    ) -> impl Iterator<Item = &'a RenderNode> {
+        asset
+            .render_nodes
+            .iter()
+            .zip(&self.visible_render_nodes)
+            .filter_map(|(node, visible)| visible.then_some(node))
+    }
+
+    fn toggle_helmet(&mut self) {
+        self.visible_render_nodes[4] = !self.visible_render_nodes[4];
+    }
 }
 
 pub struct Terrain {
@@ -169,7 +186,7 @@ pub struct Terrain {
 }
 
 impl Terrain {
-    pub fn new(assets: &AssetModelSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
+    pub fn new(assets: &AssetSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
         let rotation = Quat::IDENTITY;
 
         let transform = transform(position, rotation, scale);
@@ -198,7 +215,7 @@ pub struct Object {
     pub model: ModelId,
 }
 impl Object {
-    pub fn new(assets: &AssetModelSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
+    pub fn new(assets: &AssetSet, model: ModelId, position: Vec3, scale: Vec3) -> Self {
         Self {
             position,
             rotation: Quat::IDENTITY,
@@ -231,7 +248,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(assets: &AssetModelSet) -> Self {
+    pub fn new(assets: &AssetSet) -> Self {
         let input = Input::new();
         let camera = Camera::new(&winit::dpi::PhysicalSize {
             width: 800,
@@ -262,7 +279,8 @@ impl Game {
             "Foo Nameplate 🦀",
         ));
         player.set_nameplate(player_nameplate);
-
+        player.visible_render_nodes[4] = true;
+        player.visible_render_nodes[3] = true;
         let fps = texts.create(Text::new(
             Color::rgb(255, 255, 255),
             text::Anchor::Right,
@@ -307,6 +325,9 @@ impl Game {
         if self.input.is_pressed(KeyCode::Digit0) {
             player.animation.play_loop(AnimationId::Wave)
         }
+        if self.input.is_pressed(KeyCode::Digit9) {
+            player.toggle_helmet();
+        }
         if self.input.is_pressed(KeyCode::KeyU) {
             camera.rotate_pitch(delta_time * PI / 2.0)
         }
@@ -328,7 +349,7 @@ impl Game {
         false
     }
 
-    pub fn update(&mut self, delta_time: f32, assets: &AssetModelSet) {
+    pub fn update(&mut self, delta_time: f32, assets: &AssetSet) {
         self.texts
             .get_mut(self.fps)
             .unwrap()

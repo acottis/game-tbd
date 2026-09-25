@@ -15,7 +15,7 @@ mod game;
 mod graphics;
 mod input;
 
-use crate::assets::{AssetModel, AssetModelSet};
+use crate::assets::{Asset, AssetSet};
 
 pub struct Renderer {
     pub window: Arc<Window>,
@@ -24,7 +24,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(window: Window, assets: &[AssetModel]) -> Self {
+    pub fn new(window: Window, assets: &[Asset]) -> Self {
         let window = Arc::new(window);
         let mut gpu = graphics::Gpu::new(window.clone());
         gpu.resize(window.inner_size());
@@ -44,7 +44,7 @@ impl Renderer {
     }
 
     #[inline(always)]
-    pub fn render(&mut self, game: &Game, assets: &AssetModelSet) {
+    pub fn render(&mut self, game: &Game, assets: &AssetSet) {
         self.gpu.render(&self.window, game, &self.models, assets);
     }
 }
@@ -52,14 +52,14 @@ impl Renderer {
 struct App {
     renderer: Option<Renderer>,
     game: Game,
-    assets: AssetModelSet,
+    assets: AssetSet,
     last_frame_time: Instant,
     delta_time: f32,
 }
 
 impl App {
     fn new() -> Self {
-        let assets = AssetModelSet::load();
+        let assets = AssetSet::load();
         Self {
             renderer: None,
             game: Game::new(&assets),

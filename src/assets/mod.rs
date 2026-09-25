@@ -12,6 +12,11 @@ use crate::{
     graphics::Vertex,
 };
 
+pub type MeshId = u32;
+pub type NodeId = u32;
+pub type MaterialId = u32;
+pub type SkinId = u32;
+
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
 pub enum ModelId {
@@ -70,9 +75,9 @@ impl Default for Material {
 
 #[derive(Debug, Clone, Default)]
 pub struct Node {
-    pub parent: Option<u32>,
+    pub parent: Option<NodeId>,
     pub local_transform: Mat4,
-    pub mesh: Option<u32>,
+    pub mesh: Option<MeshId>,
 }
 
 pub struct Mesh {
@@ -84,11 +89,11 @@ pub struct Mesh {
 pub struct Primitive {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub material: Option<usize>,
+    pub material: Option<MaterialId>,
 }
 
 impl Primitive {
-    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Option<usize>) -> Self {
+    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Option<MaterialId>) -> Self {
         Self {
             vertices,
             indices,
@@ -100,15 +105,15 @@ impl Primitive {
 // To avoid interating over every node in renderer
 #[derive(Debug, Clone, Copy)]
 pub struct RenderNode {
-    pub node: u32,
-    pub mesh: u32,
-    pub skin: Option<u32>,
+    pub node: NodeId,
+    pub mesh: MeshId,
+    pub skin: Option<SkinId>,
 }
 
-pub struct AssetModel {
+pub struct Asset {
     pub nodes: Vec<Node>,
     pub render_nodes: Vec<RenderNode>,
-    pub node_order: Vec<u32>,
+    pub node_order: Vec<NodeId>,
     pub meshes: Vec<Mesh>,
     pub animations: AnimationSet,
     pub materials: Vec<Material>,
@@ -117,14 +122,14 @@ pub struct AssetModel {
     pub rest_world_transforms: Vec<Mat4>,
 }
 
-pub struct AssetModelSet(pub Vec<AssetModel>);
+pub struct AssetSet(pub Vec<Asset>);
 
-impl AssetModelSet {
+impl AssetSet {
     // TODO: Consider using include_bytes! instead
     pub fn load() -> Self {
         let dir = std::fs::read_dir("assets").unwrap();
 
-        let mut assets: [Option<AssetModel>; ModelId::COUNT] = array::from_fn(|_| None);
+        let mut assets: [Option<Asset>; ModelId::COUNT] = array::from_fn(|_| None);
         for entry in dir {
             let path = entry.unwrap().path();
 
@@ -145,7 +150,7 @@ impl AssetModelSet {
         Self(assets)
     }
 
-    pub fn get(&self, id: ModelId) -> &AssetModel {
+    pub fn get(&self, id: ModelId) -> &Asset {
         &self.0[id as usize]
     }
 }

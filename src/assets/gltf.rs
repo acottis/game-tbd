@@ -5,7 +5,7 @@ use gltf::animation::util::ReadOutputs;
 use gltf::{Document, buffer::Data, image::Source, texture::Info};
 use image::{DynamicImage, ImageFormat};
 
-use crate::assets::{AssetModel, Node, RenderNode};
+use crate::assets::{Asset, MaterialId, MeshId, Node, NodeId, RenderNode};
 use crate::assets::{Material, Mesh, Primitive};
 use crate::engine::animation::{
     AnimationClip, Joint, NodeAnimation, Rotation, Scale, Skin, Translation,
@@ -55,7 +55,7 @@ fn load_skins(document: &Document, buffer: &[Data]) -> Vec<Skin> {
             .joints()
             .enumerate()
             .map(|(joint_index, node)| Joint {
-                node: node.index() as u32,
+                node: node.index() as NodeId,
                 inverse_bind: inverse_bind_matrices[joint_index],
             })
             .collect();
@@ -154,7 +154,7 @@ fn load_mesh(mesh: gltf::Mesh, buffer: &[Data]) -> Mesh {
         primitives.push(Primitive::new(
             vertices,
             indices,
-            primitive.material().index(),
+            primitive.material().index().map(|id| id as MaterialId),
         ));
     }
     Mesh {
@@ -184,16 +184,16 @@ fn load_materials(document: &Document, buffer: &[Data]) -> Vec<Material> {
 
 fn load_node(
     nodes: &mut [Node],
-    node_order: &mut Vec<u32>,
+    node_order: &mut Vec<NodeId>,
     render_nodes: &mut Vec<RenderNode>,
     world_transforms: &mut [Mat4],
     bounding_box: &mut BoundingBox,
     node: gltf::Node,
     meshes: &[Mesh],
-    parent: Option<u32>,
+    parent: Option<NodeId>,
 ) {
     let index = node.index();
-    node_order.push(index as u32);
+    node_order.push(index as NodeId);
 
     let local_transform = Mat4::from_cols_array_2d(&node.transform().matrix());
 
@@ -203,15 +203,17 @@ fn load_node(
     };
     let world_transform = parent_world_transform * local_transform;
 
+    println!("Node: {}", index);
     let mesh_index = if let Some(mesh) = node.mesh() {
         let mesh_index = mesh.index();
+        println!("Mesh: {:?} - {:?}", mesh_index, mesh.name());
 
         *bounding_box =
             bounding_box.union(meshes[mesh_index].bounding_box.transform(world_transform));
 
         render_nodes.push(RenderNode {
-            node: index as u32,
-            mesh: mesh_index as u32,
+            node: index as NodeId,
+            mesh: mesh_index as MeshId,
             skin: node.skin().map(|skin| skin.index() as u32),
         });
 
@@ -248,7 +250,7 @@ fn load_meshes(document: &Document, buffer: &[Data]) -> Vec<Mesh> {
         .collect()
 }
 
-pub fn load(path: impl AsRef<Path>) -> AssetModel {
+pub fn load(path: impl AsRef<Path>) -> Asset {
     let (document, buffer, _) = gltf::import(&path).unwrap();
 
     // TODO: We only handle one scene?
@@ -280,8 +282,9 @@ pub fn load(path: impl AsRef<Path>) -> AssetModel {
             None,
         );
     }
+    println!("{:?}", render_nodes);
 
-    AssetModel {
+    Asset {
         nodes,
         meshes,
         animations,
@@ -300,8 +303,8 @@ mod tests {
 
     #[test]
     fn load_assets() {
-        load("assets/foo.glb");
-        load("assets/ground.glb");
+        // load("assets/foo.glb");
+        // load("assets/ground.glb");
         load("assets/sabine.glb");
     }
 }

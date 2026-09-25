@@ -1,5 +1,5 @@
 use crate::{
-    assets::AssetModel,
+    assets::Asset,
     engine::animation::{AnimationClip, Pose, SkinPose},
 };
 
@@ -36,7 +36,7 @@ pub struct Animation {
     pub skin_poses: Vec<SkinPose>,
 }
 impl Animation {
-    pub fn new(asset: &AssetModel) -> Self {
+    pub fn new(asset: &Asset) -> Self {
         Self {
             state: State::new(AnimationId::Idle),
             skin_poses: asset.skins.iter().map(SkinPose::new).collect(),
@@ -59,7 +59,7 @@ impl Animation {
         self.state.id
     }
 
-    pub fn update(&mut self, delta_time: f32, asset: &AssetModel) {
+    pub fn update(&mut self, delta_time: f32, asset: &Asset) {
         self.state.update(delta_time);
 
         // If the asset has the AnimateID available carry on
@@ -96,7 +96,7 @@ impl Animation {
         }
     }
 
-    fn reset_pose(&mut self, asset: &AssetModel) {
+    fn reset_pose(&mut self, asset: &Asset) {
         self.pose
             .world_transforms
             .copy_from_slice(&asset.rest_world_transforms);

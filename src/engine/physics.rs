@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use glam::{Mat3, Mat4, Vec3};
 
-use crate::assets::AssetModel;
+use crate::assets::Asset;
 
 pub const GRAVITY: Vec3 = Vec3::new(0.0, -9.81, 0.0);
 
@@ -134,7 +134,7 @@ pub struct GroundCollision {
 }
 
 impl GroundCollision {
-    pub fn new(model: &AssetModel, transform: Mat4) -> Self {
+    pub fn new(model: &Asset, transform: Mat4) -> Self {
         let mut triangles = Vec::new();
 
         for render_node in &model.render_nodes {

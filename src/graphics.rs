@@ -9,7 +9,7 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    assets::{self, AssetModel, AssetModelSet, ModelId},
+    assets::{self, Asset, AssetSet, MaterialId, ModelId, RenderNode},
     engine::{
         light::Light,
         store::Handle,
@@ -374,30 +374,24 @@ impl ModelTransforms {
         }
     }
 
-    fn add_rigid_model(&mut self, model: &AssetModel, world_transform: Mat4) {
-        for render_node in &model.render_nodes {
+    fn add_rigid_asset(&mut self, asset: &Asset, world_transform: Mat4) {
+        for render_node in &asset.render_nodes {
             self.model_transforms.push(ModelTransform::rigid(
-                world_transform * model.rest_world_transforms[render_node.node as usize],
+                world_transform * asset.rest_world_transforms[render_node.node as usize],
             ));
         }
     }
 
-    fn prepare(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        game: &Game,
-        asset_models: &AssetModelSet,
-    ) {
+    fn prepare(&mut self, device: &Device, queue: &Queue, game: &Game, assets: &AssetSet) {
         for entity in &game.entities {
             let entity_transform = entity.transform();
-            let model = asset_models.get(entity.model);
+            let asset = assets.get(entity.model);
 
-            for render_node in &model.render_nodes {
-                let transform = entity_transform
-                    * entity.animation.pose.world_transforms[render_node.node as usize];
+            for node in entity.visible_render_nodes(asset) {
+                let transform =
+                    entity_transform * entity.animation.pose.world_transforms[node.node as usize];
 
-                let model_transform = match render_node.skin {
+                let model_transform = match node.skin {
                     Some(skin_index) => {
                         let skin_pose = &entity.animation.skin_poses[skin_index as usize];
                         let bone_offset = self.bones.len();
@@ -413,12 +407,12 @@ impl ModelTransforms {
         }
 
         for object in &game.objects {
-            let model = asset_models.get(object.model);
-            self.add_rigid_model(model, object.transform());
+            let asset = assets.get(object.model);
+            self.add_rigid_asset(asset, object.transform());
         }
 
-        let model = asset_models.get(game.terrain.model);
-        self.add_rigid_model(model, game.terrain.transform());
+        let asset = assets.get(game.terrain.model);
+        self.add_rigid_asset(asset, game.terrain.transform());
 
         // This needs to happen after transformations
         self.ensure_capacity(device);
@@ -660,13 +654,13 @@ struct Model {
 }
 
 impl Model {
-    fn load(gpu: &Gpu, model: &AssetModel) -> Self {
-        let meshes = model
+    fn load(gpu: &Gpu, asset: &Asset) -> Self {
+        let meshes = asset
             .meshes
             .iter()
             .map(|mesh| Mesh::load(&gpu.device, mesh))
             .collect();
-        let materials = model
+        let materials = asset
             .materials
             .iter()
             .map(|material| Material::new(&gpu.device, &gpu.queue, &gpu.material_layout, material))
@@ -675,19 +669,13 @@ impl Model {
     }
 
     #[inline(always)]
-    fn draw(&self, render_pass: &mut RenderPass, transform_index: &mut u32) {
-        for mesh in &self.meshes {
-            mesh.draw(render_pass, &self.materials, *transform_index);
-            *transform_index += 1;
-        }
+    fn draw(&self, render_pass: &mut RenderPass, node: &RenderNode, transform_index: u32) {
+        self.meshes[node.mesh as usize].draw(render_pass, &self.materials, transform_index);
     }
 
     #[inline(always)]
-    fn draw_shadow(&self, render_pass: &mut RenderPass, transform_index: &mut u32) {
-        for mesh in &self.meshes {
-            mesh.draw_shadow(render_pass, *transform_index);
-            *transform_index += 1;
-        }
+    fn draw_shadow(&self, render_pass: &mut RenderPass, node: &RenderNode, transform_index: u32) {
+        self.meshes[node.mesh as usize].draw_shadow(render_pass, transform_index);
     }
 }
 
@@ -713,7 +701,7 @@ impl Mesh {
             // Don't load material if its already loaded
             if primitive.material_index != last_material_index {
                 if let Some(index) = primitive.material_index {
-                    render_pass.set_bind_group(2, &materials[index].bind_group, &[]);
+                    render_pass.set_bind_group(2, &materials[index as usize].bind_group, &[]);
 
                     last_material_index = primitive.material_index;
                 }
@@ -745,7 +733,7 @@ struct Primitive {
     vertex: Buffer,
     index: Buffer,
     indices_len: u32,
-    material_index: Option<usize>,
+    material_index: Option<MaterialId>,
 }
 
 impl Primitive {
@@ -765,7 +753,7 @@ impl Primitive {
             vertex,
             index,
             indices_len: primitive.indices.len() as u32,
-            material_index: primitive.material,
+            material_index: primitive.material.map(|id| id as MaterialId),
         }
     }
 }
@@ -773,8 +761,8 @@ impl Primitive {
 pub struct ModelSet(Vec<Model>);
 
 impl ModelSet {
-    pub fn load(gpu: &Gpu, models: &[AssetModel]) -> Self {
-        Self(models.iter().map(|model| Model::load(gpu, model)).collect())
+    pub fn load(gpu: &Gpu, assets: &[Asset]) -> Self {
+        Self(assets.iter().map(|model| Model::load(gpu, model)).collect())
     }
 
     fn get(&self, id: ModelId) -> &Model {
@@ -1277,28 +1265,42 @@ impl Gpu {
         }
     }
 
-    fn render_shadows(&self, encoder: &mut CommandEncoder, game: &Game, models: &ModelSet) {
-        let mut shadow_pass =
-            encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
+    fn render_shadows(
+        &self,
+        encoder: &mut CommandEncoder,
+        game: &Game,
+        models: &ModelSet,
+        assets: &AssetSet,
+    ) {
+        let mut pass = encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
 
-        shadow_pass.set_pipeline(&self.lighting.shadows.pipeline);
-        shadow_pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
-        shadow_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
+        pass.set_pipeline(&self.lighting.shadows.pipeline);
+        pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
+        pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
-        let transform_index = &mut 0;
+        let mut transform_index = 0;
         for entity in &game.entities {
-            models
-                .get(entity.model)
-                .draw_shadow(&mut shadow_pass, transform_index);
+            let asset = assets.get(entity.model);
+            let model = models.get(entity.model);
+            for node in entity.visible_render_nodes(asset) {
+                model.draw_shadow(&mut pass, node, transform_index);
+                transform_index += 1
+            }
         }
         for object in &game.objects {
-            models
-                .get(object.model)
-                .draw_shadow(&mut shadow_pass, transform_index);
+            let asset = assets.get(object.model);
+            let model = models.get(object.model);
+            for node in &asset.render_nodes {
+                model.draw_shadow(&mut pass, node, transform_index);
+                transform_index += 1
+            }
         }
-        models
-            .get(game.terrain.model)
-            .draw_shadow(&mut shadow_pass, transform_index);
+        let asset = assets.get(game.terrain.model);
+        let model = models.get(game.terrain.model);
+        for node in &asset.render_nodes {
+            model.draw_shadow(&mut pass, node, transform_index);
+            transform_index += 1
+        }
     }
 
     fn render_scene(
@@ -1307,6 +1309,7 @@ impl Gpu {
         view: &TextureView,
         game: &Game,
         models: &ModelSet,
+        assets: &AssetSet,
     ) {
         let color_attachments = [Some(RenderPassColorAttachment {
             view,
@@ -1326,20 +1329,29 @@ impl Gpu {
         render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
         render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
-        let transform_index = &mut 0;
+        let mut transform_index = 0;
         for entity in &game.entities {
-            models
-                .get(entity.model)
-                .draw(&mut render_pass, transform_index);
+            let asset = assets.get(entity.model);
+            let model = models.get(entity.model);
+            for render_node in entity.visible_render_nodes(asset) {
+                model.draw(&mut render_pass, render_node, transform_index);
+                transform_index += 1
+            }
         }
         for object in &game.objects {
-            models
-                .get(object.model)
-                .draw(&mut render_pass, transform_index);
+            let asset = assets.get(object.model);
+            let model = models.get(object.model);
+            for render_node in &asset.render_nodes {
+                model.draw(&mut render_pass, render_node, transform_index);
+                transform_index += 1
+            }
         }
-        models
-            .get(game.terrain.model)
-            .draw(&mut render_pass, transform_index);
+        let asset = assets.get(game.terrain.model);
+        let model = models.get(game.terrain.model);
+        for render_node in &asset.render_nodes {
+            model.draw(&mut render_pass, render_node, transform_index);
+            transform_index += 1
+        }
 
         self.sky.render(&mut render_pass);
 
@@ -1349,18 +1361,12 @@ impl Gpu {
             .unwrap();
     }
 
-    pub fn render(
-        &mut self,
-        window: &Window,
-        game: &Game,
-        models: &ModelSet,
-        asset_models: &AssetModelSet,
-    ) {
+    pub fn render(&mut self, window: &Window, game: &Game, models: &ModelSet, assets: &AssetSet) {
         self.camera.prepare(&self.queue, game);
         self.sky.prepare(&self.queue, game);
         self.lighting.prepare(&self.queue, game);
         self.model_transforms
-            .prepare(&self.device, &self.queue, game, asset_models);
+            .prepare(&self.device, &self.queue, game, assets);
         self.text.prepare(
             &self.device,
             &self.queue,
@@ -1377,8 +1383,8 @@ impl Gpu {
         let view = &frame.texture.create_view(&Default::default());
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.render_shadows(&mut encoder, game, models);
-        self.render_scene(&mut encoder, view, game, models);
+        self.render_shadows(&mut encoder, game, models, assets);
+        self.render_scene(&mut encoder, view, game, models, assets);
 
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
