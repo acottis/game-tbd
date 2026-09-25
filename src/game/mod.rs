@@ -307,49 +307,52 @@ impl Game {
 
         // Movement is relative to camera direction
         let mut movement = Vec3::ZERO;
-        if self.input.is_pressed(KeyCode::KeyW) {
+        if self.input.is_held(KeyCode::KeyW) {
             movement += camera.forward_planar();
         }
-        if self.input.is_pressed(KeyCode::KeyS) {
+        if self.input.is_held(KeyCode::KeyS) {
             movement -= camera.forward_planar()
         }
-        if self.input.is_pressed(KeyCode::KeyA) {
+        if self.input.is_held(KeyCode::KeyA) {
             movement -= camera.right()
         }
-        if self.input.is_pressed(KeyCode::KeyD) {
+        if self.input.is_held(KeyCode::KeyD) {
             movement += camera.right()
         }
         if self.input.is_pressed(KeyCode::Space) {
             player.jump(8.0);
         }
-        if self.input.is_pressed(KeyCode::Digit0) {
+        if self.input.is_held(KeyCode::Digit0) {
             player.animation.play_loop(AnimationId::Wave)
         }
         if self.input.is_pressed(KeyCode::Digit9) {
             player.toggle_helmet();
         }
-        if self.input.is_pressed(KeyCode::KeyU) {
+        if self.input.is_held(KeyCode::KeyU) {
             camera.rotate_pitch(delta_time * PI / 2.0)
         }
-        if self.input.is_pressed(KeyCode::KeyJ) {
+        if self.input.is_held(KeyCode::KeyJ) {
             camera.rotate_pitch(delta_time * -PI / 2.0)
         }
-        if self.input.is_pressed(KeyCode::KeyH) {
+        if self.input.is_held(KeyCode::KeyH) {
             camera.rotate_yaw(delta_time * -PI / 2.0)
         }
-        if self.input.is_pressed(KeyCode::KeyK) {
+        if self.input.is_held(KeyCode::KeyK) {
             camera.rotate_yaw(delta_time * PI / 2.0)
         }
-        if self.input.is_pressed(KeyCode::Escape) {
+        if self.input.is_held(KeyCode::Escape) {
             return true;
         }
         let rotation_factor = (10.0 * delta_time).min(1.0);
         player.move_direction(rotation_factor, movement);
         camera.follow(player.position());
+
         false
     }
 
-    pub fn update(&mut self, delta_time: f32, assets: &AssetSet) {
+    pub fn update(&mut self, delta_time: f32, assets: &AssetSet) -> bool {
+        let should_exit = self.handle_inputs(delta_time);
+
         self.texts
             .get_mut(self.fps)
             .unwrap()
@@ -366,5 +369,7 @@ impl Game {
             entity.animation.update(delta_time, asset);
             entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
         }
+
+        should_exit
     }
 }

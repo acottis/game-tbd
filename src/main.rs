@@ -57,13 +57,6 @@ impl App {
         renderer.resize(width, height);
         self.game.camera.set_aspect_ratio(width, height);
     }
-
-    fn handle_inputs(&mut self, event_loop: &ActiveEventLoop) {
-        let should_exit = self.game.handle_inputs(self.delta_time);
-        if should_exit {
-            event_loop.exit()
-        }
-    }
 }
 
 impl ApplicationHandler for App {
@@ -85,9 +78,12 @@ impl ApplicationHandler for App {
 
         log::debug!("FPS: {}, DT: {}", 1.0 / self.delta_time, self.delta_time);
 
-        self.handle_inputs(event_loop);
-        self.game.update(self.delta_time, &self.assets);
+        let should_exit = self.game.update(self.delta_time, &self.assets);
+        if should_exit {
+            event_loop.exit()
+        }
         self.render();
+        self.game.input.pressed_keys.clear();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
