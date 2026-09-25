@@ -271,7 +271,7 @@ impl Shadows {
     fn render(
         &self,
         encoder: &mut CommandEncoder,
-        models: &ModelSet,
+        models: &GpuModelSet,
         model_renderer: &ModelRenderer,
     ) {
         let mut pass = encoder.begin_render_pass(&self.render_pass_descriptor());
@@ -522,7 +522,7 @@ impl ModelRenderer {
         })
     }
 
-    fn render(&self, pass: &mut RenderPass, models: &ModelSet) {
+    fn render(&self, pass: &mut RenderPass, models: &GpuModelSet) {
         for draw in &self.draws {
             let model = models.get(draw.model_id);
             model.draw(pass, &draw.render_node, draw.transform_index);
@@ -698,29 +698,27 @@ impl Material {
     }
 }
 
-struct Model {
+struct GpuModel {
     meshes: Vec<Mesh>,
     materials: Vec<Material>,
 }
 
-impl Model {
-    fn load(gpu: &Gpu, asset: &Asset) -> Self {
+impl GpuModel {
+    fn load(
+        device: &Device,
+        queue: &Queue,
+        material_layout: &BindGroupLayout,
+        asset: &Asset,
+    ) -> Self {
         let meshes = asset
             .meshes
             .iter()
-            .map(|mesh| Mesh::load(&gpu.device, mesh))
+            .map(|mesh| Mesh::load(device, mesh))
             .collect();
         let materials = asset
             .materials
             .iter()
-            .map(|material| {
-                Material::new(
-                    &gpu.device,
-                    &gpu.queue,
-                    &gpu.scene.material_layout,
-                    material,
-                )
-            })
+            .map(|material| Material::new(device, queue, material_layout, material))
             .collect();
         Self { meshes, materials }
     }
@@ -756,6 +754,7 @@ impl Mesh {
 
         for primitive in &self.primitives {
             // Don't load material if its already loaded
+            // TODO: Think about default materials
             if primitive.material_index != last_material_index {
                 if let Some(index) = primitive.material_index {
                     render_pass.set_bind_group(2, &materials[index as usize].bind_group, &[]);
@@ -811,14 +810,24 @@ impl Primitive {
     }
 }
 
-pub struct ModelSet(Vec<Model>);
+struct GpuModelSet(Vec<GpuModel>);
 
-impl ModelSet {
-    pub fn load(gpu: &Gpu, assets: &[Asset]) -> Self {
-        Self(assets.iter().map(|model| Model::load(gpu, model)).collect())
+impl GpuModelSet {
+    fn load(
+        device: &Device,
+        queue: &Queue,
+        material_layout: &BindGroupLayout,
+        assets: &[Asset],
+    ) -> Self {
+        Self(
+            assets
+                .iter()
+                .map(|model| GpuModel::load(device, queue, material_layout, model))
+                .collect(),
+        )
     }
 
-    fn get(&self, id: ModelId) -> &Model {
+    fn get(&self, id: ModelId) -> &GpuModel {
         &self.0[id as usize]
     }
 }
@@ -1036,15 +1045,17 @@ struct Text {
     font_system: glyphon::FontSystem,
     buffers: Vec<TextBuffer>,
     draws: Vec<TextDraw>,
+    width: u32,
+    height: u32,
 }
 
 impl Text {
-    fn new(device: &Device, queue: &Queue, texture_format: TextureFormat) -> Self {
+    fn new(device: &Device, queue: &Queue, format: TextureFormat, width: u32, height: u32) -> Self {
         let font_system = glyphon::FontSystem::new();
         let swash_cache = glyphon::SwashCache::new();
         let cache = glyphon::Cache::new(&device);
         let viewport = glyphon::Viewport::new(&device, &cache);
-        let mut atlas = glyphon::TextAtlas::new(&device, &queue, &cache, texture_format);
+        let mut atlas = glyphon::TextAtlas::new(&device, &queue, &cache, format);
         let renderer = glyphon::TextRenderer::new(
             &mut atlas,
             &device,
@@ -1066,6 +1077,8 @@ impl Text {
             font_system,
             buffers: Vec::new(),
             draws: Vec::new(),
+            width,
+            height,
         }
     }
 
@@ -1077,7 +1090,7 @@ impl Text {
         self.draws.push(draw)
     }
 
-    fn prepare(&mut self, device: &Device, queue: &Queue, width: u32, height: u32, game: &Game) {
+    fn prepare(&mut self, device: &Device, queue: &Queue, game: &Game) {
         self.draws.clear();
 
         while self.buffers.len() < game.texts.len() {
@@ -1095,8 +1108,8 @@ impl Text {
             let position = world_to_screen(
                 view_projection,
                 entity.position() + Vec3::new(0.5, 2.5, 0.0),
-                width,
-                height,
+                self.width,
+                self.height,
             )
             .unwrap();
             self.queue(game, TextDraw::new(nameplate, position));
@@ -1106,7 +1119,13 @@ impl Text {
             let text = game.texts.get(draw.text).unwrap();
             let buffer = self.buffers.get(draw.text.index()).unwrap();
 
-            Some(Self::text_area(buffer, text, draw.position, width, height))
+            Some(Self::text_area(
+                buffer,
+                text,
+                draw.position,
+                self.width,
+                self.height,
+            ))
         });
 
         self.renderer
@@ -1123,6 +1142,8 @@ impl Text {
     }
 
     fn resize(&mut self, queue: &Queue, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
         self.viewport
             .update(&queue, glyphon::Resolution { width, height });
     }
@@ -1178,13 +1199,13 @@ fn world_to_screen(
 
 struct Scene {
     camera: Camera,
-    models: ModelRenderer,
+    model_renderer: ModelRenderer,
     pipeline: RenderPipeline,
     lighting: Lighting,
     sky: Sky,
     text: Text,
-    material_layout: BindGroupLayout,
     depth_view: TextureView,
+    models: GpuModelSet,
 }
 
 impl Scene {
@@ -1194,16 +1215,15 @@ impl Scene {
         surface_format: TextureFormat,
         width: u32,
         height: u32,
+        assets: &[Asset],
     ) -> Scene {
-        let mut text = Text::new(&device, &queue, surface_format);
-        text.resize(&queue, width, height);
-
+        let text = Text::new(&device, &queue, surface_format, width, height);
         let camera = Camera::new(&device);
         let sky = Sky::new(&device, surface_format);
 
-        let models = ModelRenderer::new(&device, 64, 256);
+        let model_renderer = ModelRenderer::new(&device, 64, 256);
 
-        let lighting = Lighting::new(&device, &models.layout);
+        let lighting = Lighting::new(&device, &model_renderer.layout);
         let material_layout = Material::layout(&device);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -1212,7 +1232,7 @@ impl Scene {
                 Some(&camera.layout),
                 Some(&lighting.layout),
                 Some(&material_layout),
-                Some(&models.layout),
+                Some(&model_renderer.layout),
             ],
             immediate_size: 0,
         });
@@ -1254,28 +1274,29 @@ impl Scene {
             multiview_mask: None,
         });
         let depth_view = create_depth_view(&device, width, height);
+
+        let models = GpuModelSet::load(&device, &queue, &material_layout, assets);
         Self {
             camera,
-            models,
+            model_renderer,
             pipeline,
             lighting,
             sky,
             text,
-            material_layout,
             depth_view,
+            models,
         }
     }
 
     fn render_pass_descriptor<'tex>(
         &'tex self,
-        depth_view: &'tex TextureView,
         color_attachments: &'tex [Option<RenderPassColorAttachment<'tex>>],
     ) -> RenderPassDescriptor<'tex> {
         RenderPassDescriptor {
             label: Some("Render"),
             color_attachments,
             depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &depth_view,
+                view: &self.depth_view,
                 depth_ops: Some(Operations {
                     load: LoadOp::Clear(1.0),
                     store: StoreOp::Store,
@@ -1288,8 +1309,10 @@ impl Scene {
         }
     }
 
-    fn render(&self, encoder: &mut CommandEncoder, view: &TextureView, models: &ModelSet) {
-        self.lighting.shadows.render(encoder, models, &self.models);
+    fn render(&self, encoder: &mut CommandEncoder, view: &TextureView) {
+        self.lighting
+            .shadows
+            .render(encoder, &self.models, &self.model_renderer);
 
         let color_attachments = &[Some(RenderPassColorAttachment {
             view,
@@ -1301,15 +1324,14 @@ impl Scene {
             depth_slice: None,
         })];
 
-        let mut pass = encoder
-            .begin_render_pass(&self.render_pass_descriptor(&self.depth_view, color_attachments));
+        let mut pass = encoder.begin_render_pass(&self.render_pass_descriptor(color_attachments));
 
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
         pass.set_bind_group(1, &self.lighting.bind_group, &[]);
-        pass.set_bind_group(3, &self.models.bind_group, &[]);
+        pass.set_bind_group(3, &self.model_renderer.bind_group, &[]);
 
-        self.models.render(&mut pass, models);
+        self.model_renderer.render(&mut pass, &self.models);
         self.sky.render(&mut pass);
         self.text
             .renderer
@@ -1323,44 +1345,44 @@ impl Scene {
         self.depth_view = create_depth_view(device, width, height);
     }
 
-    fn prepare(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        width: u32,
-        height: u32,
-        game: &Game,
-        assets: &AssetSet,
-    ) {
+    fn prepare(&mut self, device: &Device, queue: &Queue, game: &Game, assets: &AssetSet) {
         self.camera.prepare(queue, game);
         self.sky.prepare(queue, game);
         self.lighting.prepare(queue, game);
-        self.models.prepare(device, queue, game, assets);
-        self.text.prepare(device, queue, width, height, game);
+        self.model_renderer.prepare(device, queue, game, assets);
+        self.text.prepare(device, queue, game);
     }
 }
 
-pub struct Gpu {
+pub struct Renderer {
+    window: Arc<Window>,
     surface: Surface<'static>,
     surface_config: SurfaceConfiguration,
     device: Device,
     queue: Queue,
-
     scene: Scene,
 }
 
-impl Gpu {
-    pub fn new(window: Arc<Window>) -> Self {
+impl Renderer {
+    pub fn new(window: Window, assets: &[Asset]) -> Self {
+        let window = Arc::new(window);
         let PhysicalSize { width, height } = window.inner_size();
-        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
-        let surface = instance.create_surface(window).unwrap();
 
+        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
+        let surface = instance.create_surface(window.clone()).unwrap();
         let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
 
         let surface_config = surface.get_default_config(&adapter, width, height).unwrap();
         surface.configure(&device, &surface_config);
 
-        let scene = Scene::new(&device, &queue, surface_config.format, width, height);
+        let scene = Scene::new(
+            &device,
+            &queue,
+            surface_config.format,
+            width,
+            height,
+            assets,
+        );
 
         log::info!("{:#?}", adapter.get_info());
 
@@ -1370,9 +1392,11 @@ impl Gpu {
             device,
             queue,
             scene,
+            window,
         }
     }
 
+    #[inline(always)]
     pub fn resize(&mut self, width: u32, height: u32) {
         self.surface_config.height = height;
         self.surface_config.width = width;
@@ -1381,15 +1405,9 @@ impl Gpu {
         self.scene.resize(&self.device, &self.queue, width, height);
     }
 
-    pub fn render(&mut self, window: &Window, game: &Game, models: &ModelSet, assets: &AssetSet) {
-        self.scene.prepare(
-            &self.device,
-            &self.queue,
-            self.surface_config.width,
-            self.surface_config.height,
-            game,
-            assets,
-        );
+    #[inline(always)]
+    pub fn render(&mut self, game: &Game, assets: &AssetSet) {
+        self.scene.prepare(&self.device, &self.queue, game, assets);
 
         let frame = match self.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
@@ -1399,10 +1417,10 @@ impl Gpu {
         let view = &frame.texture.create_view(&Default::default());
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.scene.render(&mut encoder, view, models);
+        self.scene.render(&mut encoder, view);
 
         self.queue.submit([encoder.finish()]);
-        window.pre_present_notify();
+        self.window.pre_present_notify();
         self.queue.present(frame);
     }
 }

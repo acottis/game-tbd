@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 
 use game::Game;
 use winit::{
@@ -15,40 +15,7 @@ mod game;
 mod graphics;
 mod input;
 
-use crate::assets::{Asset, AssetSet};
-
-pub struct Renderer {
-    pub window: Arc<Window>,
-    pub gpu: graphics::Gpu,
-    pub models: graphics::ModelSet,
-}
-
-impl Renderer {
-    pub fn new(window: Window, assets: &[Asset]) -> Self {
-        let window = Arc::new(window);
-        let mut gpu = graphics::Gpu::new(window.clone());
-        let PhysicalSize { width, height } = window.inner_size();
-        gpu.resize(width, height);
-
-        let models = graphics::ModelSet::load(&gpu, &assets);
-
-        Self {
-            window,
-            gpu,
-            models,
-        }
-    }
-
-    #[inline(always)]
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.gpu.resize(width, height);
-    }
-
-    #[inline(always)]
-    pub fn render(&mut self, game: &Game, assets: &AssetSet) {
-        self.gpu.render(&self.window, game, &self.models, assets);
-    }
-}
+use crate::{assets::AssetSet, graphics::Renderer};
 
 struct App {
     renderer: Option<Renderer>,
