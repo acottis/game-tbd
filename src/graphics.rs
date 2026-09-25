@@ -273,7 +273,7 @@ impl Shadows {
 struct ModelDraw {
     model_id: ModelId,
     render_node: RenderNode,
-    index: u32,
+    transform_index: u32,
 }
 
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
@@ -307,12 +307,12 @@ impl ModelTransform {
     }
 }
 
-struct ModelTransforms {
+struct ModelRenderer {
     transform_buffer: Buffer,
     bone_buffer: Buffer,
     bind_group: BindGroup,
     layout: BindGroupLayout,
-    model_transforms: Vec<ModelTransform>,
+    transforms: Vec<ModelTransform>,
     draws: Vec<ModelDraw>,
     bones: Vec<Mat4>,
 
@@ -320,11 +320,11 @@ struct ModelTransforms {
     bone_capacity: usize,
 }
 
-impl ModelTransforms {
+impl ModelRenderer {
     fn new(device: &Device, transform_capacity: usize, bone_capacity: usize) -> Self {
         let layout = Self::layout(device);
         let transform_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Skinned Model Transforms"),
+            label: Some("Model Transforms"),
             size: (transform_capacity * size_of::<ModelTransform>()) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -341,7 +341,7 @@ impl ModelTransforms {
             transform_buffer,
             bind_group,
             transform_capacity,
-            model_transforms: Vec::with_capacity(transform_capacity),
+            transforms: Vec::with_capacity(transform_capacity),
             draws: Vec::with_capacity(transform_capacity),
             bones: Vec::with_capacity(bone_capacity),
             layout,
@@ -351,8 +351,8 @@ impl ModelTransforms {
     }
 
     fn ensure_capacity(&mut self, device: &Device) {
-        if self.model_transforms.len() > self.transform_capacity {
-            self.transform_capacity = self.model_transforms.len().next_power_of_two();
+        if self.transforms.len() > self.transform_capacity {
+            self.transform_capacity = self.transforms.len().next_power_of_two();
             self.transform_buffer = device.create_buffer(&BufferDescriptor {
                 label: Some("Skinned Model Transforms"),
                 size: (self.transform_capacity * std::mem::size_of::<ModelTransform>()) as u64,
@@ -384,13 +384,13 @@ impl ModelTransforms {
     }
 
     fn add_draw(&mut self, model_id: ModelId, render_node: RenderNode, transform: ModelTransform) {
-        let index = self.model_transforms.len() as u32;
+        let index = self.transforms.len() as u32;
         self.draws.push(ModelDraw {
             model_id,
             render_node,
-            index,
+            transform_index: index,
         });
-        self.model_transforms.push(transform);
+        self.transforms.push(transform);
     }
 
     fn prepare(&mut self, device: &Device, queue: &Queue, game: &Game, assets: &AssetSet) {
@@ -398,46 +398,45 @@ impl ModelTransforms {
         self.draws.clear();
 
         for entity in &game.entities {
-            let entity_transform = entity.transform();
+            let entity_world = entity.transform();
             let asset = assets.get(entity.model);
 
             for render_node in entity.visible_render_nodes(asset) {
-                let transform = entity_transform
+                let node_world = entity_world
                     * entity.animation.pose.world_transforms[render_node.node as usize];
 
-                let model_transform = match render_node.skin {
+                let transform = match render_node.skin {
                     Some(skin_index) => {
                         let skin_pose = &entity.animation.skin_poses[skin_index as usize];
                         let bone_offset = self.bones.len();
                         self.bones.extend(&skin_pose.matrices);
 
-                        ModelTransform::skinned(transform, bone_offset as u32)
+                        ModelTransform::skinned(node_world, bone_offset as u32)
                     }
-                    None => ModelTransform::rigid(transform),
+                    None => ModelTransform::rigid(node_world),
                 };
 
-                self.add_draw(entity.model, *render_node, model_transform);
+                self.add_draw(entity.model, *render_node, transform);
             }
         }
 
         for object in &game.objects {
             let asset = assets.get(object.model);
-            let transform = object.transform();
+            let object_world = object.transform();
             for render_node in &asset.render_nodes {
-                let model_transform = ModelTransform::rigid(
-                    transform * asset.rest_world_transforms[render_node.node as usize],
-                );
-                self.add_draw(object.model, *render_node, model_transform);
+                let node_world =
+                    object_world * asset.rest_world_transforms[render_node.node as usize];
+                let transform = ModelTransform::rigid(node_world);
+                self.add_draw(object.model, *render_node, transform);
             }
         }
 
         let asset = assets.get(game.terrain.model);
-        let transform = game.terrain.transform();
+        let terrain_world = game.terrain.transform();
         for render_node in &asset.render_nodes {
-            let model_transform = ModelTransform::rigid(
-                transform * asset.rest_world_transforms[render_node.node as usize],
-            );
-            self.add_draw(game.terrain.model, *render_node, model_transform);
+            let node_world = terrain_world * asset.rest_world_transforms[render_node.node as usize];
+            let transform = ModelTransform::rigid(node_world);
+            self.add_draw(game.terrain.model, *render_node, transform);
         }
 
         // This needs to happen after transformations
@@ -446,12 +445,12 @@ impl ModelTransforms {
         queue.write_buffer(
             &self.transform_buffer,
             0,
-            bytemuck::cast_slice(&self.model_transforms),
+            bytemuck::cast_slice(&self.transforms),
         );
         queue.write_buffer(&self.bone_buffer, 0, bytemuck::cast_slice(&self.bones));
 
         // Prevent reuse of deleted game transforms
-        self.model_transforms.clear();
+        self.transforms.clear();
         self.bones.clear();
     }
 
@@ -503,6 +502,13 @@ impl ModelTransforms {
                 },
             ],
         })
+    }
+
+    fn render(&self, pass: &mut RenderPass, models: &ModelSet) {
+        for draw in &self.draws {
+            let model = models.get(draw.model_id);
+            model.draw(pass, &draw.render_node, draw.transform_index);
+        }
     }
 }
 
@@ -720,7 +726,7 @@ impl Mesh {
         Self { primitives }
     }
 
-    fn draw(&self, render_pass: &mut RenderPass<'_>, materials: &[Material], transform_index: u32) {
+    fn draw(&self, render_pass: &mut RenderPass<'_>, materials: &[Material], index: u32) {
         let mut last_material_index = None;
 
         for primitive in &self.primitives {
@@ -734,11 +740,7 @@ impl Mesh {
             }
             render_pass.set_vertex_buffer(0, primitive.vertex.slice(..));
             render_pass.set_index_buffer(primitive.index.slice(..), IndexFormat::Uint32);
-            render_pass.draw_indexed(
-                0..primitive.indices_len,
-                0,
-                transform_index..transform_index + 1,
-            );
+            render_pass.draw_indexed(0..primitive.indices_len, 0, index..index + 1);
         }
     }
 
@@ -1159,7 +1161,7 @@ pub struct Gpu {
     depth_view: TextureView,
 
     camera: Camera,
-    model_transforms: ModelTransforms,
+    models: ModelRenderer,
 
     lighting: Lighting,
     sky: Sky,
@@ -1187,9 +1189,9 @@ impl Gpu {
         let camera = Camera::new(&device);
         let sky = Sky::new(&device, &surface_config);
 
-        let model_transforms = ModelTransforms::new(&device, 64, 256);
+        let models = ModelRenderer::new(&device, 64, 256);
 
-        let lighting = Lighting::new(&device, &model_transforms.layout);
+        let lighting = Lighting::new(&device, &models.layout);
         let material_layout = Material::layout(&device);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -1198,7 +1200,7 @@ impl Gpu {
                 Some(&camera.layout),
                 Some(&lighting.layout),
                 Some(&material_layout),
-                Some(&model_transforms.layout),
+                Some(&models.layout),
             ],
             immediate_size: 0,
         });
@@ -1253,7 +1255,7 @@ impl Gpu {
             material_layout,
             depth_view,
             camera,
-            model_transforms,
+            models,
             lighting,
             text,
             sky,
@@ -1296,21 +1298,15 @@ impl Gpu {
 
         pass.set_pipeline(&self.lighting.shadows.pipeline);
         pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
-        pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
+        pass.set_bind_group(3, &self.models.bind_group, &[]);
 
         for draw in draws {
             let model = models.get(draw.model_id);
-            model.draw_shadow(&mut pass, &draw.render_node, draw.index);
+            model.draw_shadow(&mut pass, &draw.render_node, draw.transform_index);
         }
     }
 
-    fn render_scene(
-        &self,
-        encoder: &mut CommandEncoder,
-        view: &TextureView,
-        models: &ModelSet,
-        draws: &[ModelDraw],
-    ) {
+    fn render_scene(&self, encoder: &mut CommandEncoder, view: &TextureView, models: &ModelSet) {
         let color_attachments = [Some(RenderPassColorAttachment {
             view,
             resolve_target: None,
@@ -1326,15 +1322,10 @@ impl Gpu {
         pass.set_pipeline(&self.scene_pipeline);
         pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
         pass.set_bind_group(1, &self.lighting.bind_group, &[]);
-        pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
+        pass.set_bind_group(3, &self.models.bind_group, &[]);
 
-        for draw in draws {
-            let model = models.get(draw.model_id);
-            model.draw(&mut pass, &draw.render_node, draw.index);
-        }
-
+        self.models.render(&mut pass, models);
         self.sky.render(&mut pass);
-
         self.text
             .renderer
             .render(&self.text.atlas, &self.text.viewport, &mut pass)
@@ -1345,8 +1336,7 @@ impl Gpu {
         self.camera.prepare(&self.queue, game);
         self.sky.prepare(&self.queue, game);
         self.lighting.prepare(&self.queue, game);
-        self.model_transforms
-            .prepare(&self.device, &self.queue, game, assets);
+        self.models.prepare(&self.device, &self.queue, game, assets);
         self.text.prepare(
             &self.device,
             &self.queue,
@@ -1363,8 +1353,8 @@ impl Gpu {
         let view = &frame.texture.create_view(&Default::default());
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.render_shadows(&mut encoder, models, &self.model_transforms.draws);
-        self.render_scene(&mut encoder, view, models, &self.model_transforms.draws);
+        self.render_shadows(&mut encoder, models, &self.models.draws);
+        self.render_scene(&mut encoder, view, models);
 
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();
