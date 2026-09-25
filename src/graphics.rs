@@ -269,6 +269,13 @@ impl Shadows {
     }
 }
 
+#[derive(Debug)]
+struct ModelDraw {
+    model_id: ModelId,
+    render_node: RenderNode,
+    index: u32,
+}
+
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
 #[repr(C)]
 struct ModelTransform {
@@ -306,6 +313,7 @@ struct ModelTransforms {
     bind_group: BindGroup,
     layout: BindGroupLayout,
     model_transforms: Vec<ModelTransform>,
+    draws: Vec<ModelDraw>,
     bones: Vec<Mat4>,
 
     transform_capacity: usize,
@@ -334,6 +342,7 @@ impl ModelTransforms {
             bind_group,
             transform_capacity,
             model_transforms: Vec::with_capacity(transform_capacity),
+            draws: Vec::with_capacity(transform_capacity),
             bones: Vec::with_capacity(bone_capacity),
             layout,
             bone_buffer,
@@ -374,24 +383,29 @@ impl ModelTransforms {
         }
     }
 
-    fn add_rigid_asset(&mut self, asset: &Asset, world_transform: Mat4) {
-        for render_node in &asset.render_nodes {
-            self.model_transforms.push(ModelTransform::rigid(
-                world_transform * asset.rest_world_transforms[render_node.node as usize],
-            ));
-        }
+    fn add_draw(&mut self, model_id: ModelId, render_node: RenderNode, transform: ModelTransform) {
+        let index = self.model_transforms.len() as u32;
+        self.draws.push(ModelDraw {
+            model_id,
+            render_node,
+            index,
+        });
+        self.model_transforms.push(transform);
     }
 
     fn prepare(&mut self, device: &Device, queue: &Queue, game: &Game, assets: &AssetSet) {
+        // Draws needs to live long enough to be rendered so we clear at start
+        self.draws.clear();
+
         for entity in &game.entities {
             let entity_transform = entity.transform();
             let asset = assets.get(entity.model);
 
-            for node in entity.visible_render_nodes(asset) {
-                let transform =
-                    entity_transform * entity.animation.pose.world_transforms[node.node as usize];
+            for render_node in entity.visible_render_nodes(asset) {
+                let transform = entity_transform
+                    * entity.animation.pose.world_transforms[render_node.node as usize];
 
-                let model_transform = match node.skin {
+                let model_transform = match render_node.skin {
                     Some(skin_index) => {
                         let skin_pose = &entity.animation.skin_poses[skin_index as usize];
                         let bone_offset = self.bones.len();
@@ -402,17 +416,29 @@ impl ModelTransforms {
                     None => ModelTransform::rigid(transform),
                 };
 
-                self.model_transforms.push(model_transform);
+                self.add_draw(entity.model, *render_node, model_transform);
             }
         }
 
         for object in &game.objects {
             let asset = assets.get(object.model);
-            self.add_rigid_asset(asset, object.transform());
+            let transform = object.transform();
+            for render_node in &asset.render_nodes {
+                let model_transform = ModelTransform::rigid(
+                    transform * asset.rest_world_transforms[render_node.node as usize],
+                );
+                self.add_draw(object.model, *render_node, model_transform);
+            }
         }
 
         let asset = assets.get(game.terrain.model);
-        self.add_rigid_asset(asset, game.terrain.transform());
+        let transform = game.terrain.transform();
+        for render_node in &asset.render_nodes {
+            let model_transform = ModelTransform::rigid(
+                transform * asset.rest_world_transforms[render_node.node as usize],
+            );
+            self.add_draw(game.terrain.model, *render_node, model_transform);
+        }
 
         // This needs to happen after transformations
         self.ensure_capacity(device);
@@ -1265,41 +1291,16 @@ impl Gpu {
         }
     }
 
-    fn render_shadows(
-        &self,
-        encoder: &mut CommandEncoder,
-        game: &Game,
-        models: &ModelSet,
-        assets: &AssetSet,
-    ) {
+    fn render_shadows(&self, encoder: &mut CommandEncoder, models: &ModelSet, draws: &[ModelDraw]) {
         let mut pass = encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
 
         pass.set_pipeline(&self.lighting.shadows.pipeline);
         pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
         pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
-        let mut transform_index = 0;
-        for entity in &game.entities {
-            let asset = assets.get(entity.model);
-            let model = models.get(entity.model);
-            for node in entity.visible_render_nodes(asset) {
-                model.draw_shadow(&mut pass, node, transform_index);
-                transform_index += 1
-            }
-        }
-        for object in &game.objects {
-            let asset = assets.get(object.model);
-            let model = models.get(object.model);
-            for node in &asset.render_nodes {
-                model.draw_shadow(&mut pass, node, transform_index);
-                transform_index += 1
-            }
-        }
-        let asset = assets.get(game.terrain.model);
-        let model = models.get(game.terrain.model);
-        for node in &asset.render_nodes {
-            model.draw_shadow(&mut pass, node, transform_index);
-            transform_index += 1
+        for draw in draws {
+            let model = models.get(draw.model_id);
+            model.draw_shadow(&mut pass, &draw.render_node, draw.index);
         }
     }
 
@@ -1307,9 +1308,8 @@ impl Gpu {
         &self,
         encoder: &mut CommandEncoder,
         view: &TextureView,
-        game: &Game,
         models: &ModelSet,
-        assets: &AssetSet,
+        draws: &[ModelDraw],
     ) {
         let color_attachments = [Some(RenderPassColorAttachment {
             view,
@@ -1321,43 +1321,23 @@ impl Gpu {
             depth_slice: None,
         })];
 
-        let mut render_pass =
-            encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
+        let mut pass = encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
 
-        render_pass.set_pipeline(&self.scene_pipeline);
-        render_pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
-        render_pass.set_bind_group(1, &self.lighting.bind_group, &[]);
-        render_pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
+        pass.set_pipeline(&self.scene_pipeline);
+        pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
+        pass.set_bind_group(1, &self.lighting.bind_group, &[]);
+        pass.set_bind_group(3, &self.model_transforms.bind_group, &[]);
 
-        let mut transform_index = 0;
-        for entity in &game.entities {
-            let asset = assets.get(entity.model);
-            let model = models.get(entity.model);
-            for render_node in entity.visible_render_nodes(asset) {
-                model.draw(&mut render_pass, render_node, transform_index);
-                transform_index += 1
-            }
-        }
-        for object in &game.objects {
-            let asset = assets.get(object.model);
-            let model = models.get(object.model);
-            for render_node in &asset.render_nodes {
-                model.draw(&mut render_pass, render_node, transform_index);
-                transform_index += 1
-            }
-        }
-        let asset = assets.get(game.terrain.model);
-        let model = models.get(game.terrain.model);
-        for render_node in &asset.render_nodes {
-            model.draw(&mut render_pass, render_node, transform_index);
-            transform_index += 1
+        for draw in draws {
+            let model = models.get(draw.model_id);
+            model.draw(&mut pass, &draw.render_node, draw.index);
         }
 
-        self.sky.render(&mut render_pass);
+        self.sky.render(&mut pass);
 
         self.text
             .renderer
-            .render(&self.text.atlas, &self.text.viewport, &mut render_pass)
+            .render(&self.text.atlas, &self.text.viewport, &mut pass)
             .unwrap();
     }
 
@@ -1383,8 +1363,8 @@ impl Gpu {
         let view = &frame.texture.create_view(&Default::default());
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.render_shadows(&mut encoder, game, models, assets);
-        self.render_scene(&mut encoder, view, game, models, assets);
+        self.render_shadows(&mut encoder, models, &self.model_transforms.draws);
+        self.render_scene(&mut encoder, view, models, &self.model_transforms.draws);
 
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();

@@ -203,10 +203,8 @@ fn load_node(
     };
     let world_transform = parent_world_transform * local_transform;
 
-    println!("Node: {}", index);
     let mesh_index = if let Some(mesh) = node.mesh() {
         let mesh_index = mesh.index();
-        println!("Mesh: {:?} - {:?}", mesh_index, mesh.name());
 
         *bounding_box =
             bounding_box.union(meshes[mesh_index].bounding_box.transform(world_transform));
