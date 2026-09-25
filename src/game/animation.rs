@@ -6,13 +6,14 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum AnimationId {
-    Jump = 0,
+    Idle = 0,
+    Walk,
+    Jump,
     Wave,
-    Idle,
 }
 
 impl AnimationId {
-    const COUNT: usize = 3;
+    const COUNT: usize = 4;
 }
 
 impl TryFrom<&str> for AnimationId {
@@ -21,6 +22,7 @@ impl TryFrom<&str> for AnimationId {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "idle" => Ok(Self::Idle),
+            "walk" => Ok(Self::Walk),
             "jump" => Ok(Self::Jump),
             "wave" => Ok(Self::Wave),
             _ => Err(format!("Invalid Animation ID: {value}")),

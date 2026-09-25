@@ -303,7 +303,7 @@ impl Game {
             player.jump(8.0);
         }
         if self.input.is_pressed(KeyCode::Digit0) {
-            player.animation.play_loop(AnimationId::Wave)
+            player.animation.play_loop(AnimationId::Walk)
         }
         if self.input.is_pressed(KeyCode::ArrowUp) {
             camera.move_forward(delta_time * 10.0)
@@ -345,6 +345,11 @@ impl Game {
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
+            if entity.velocity == Vec3::ZERO {
+                entity.animation.play(AnimationId::Idle);
+            } else {
+                entity.animation.play(AnimationId::Walk);
+            }
             let asset = assets.get(entity.model);
             entity.animation.update(delta_time, asset);
             entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
