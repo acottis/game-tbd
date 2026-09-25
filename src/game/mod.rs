@@ -319,7 +319,7 @@ impl Game {
         if self.input.is_held(KeyCode::KeyD) {
             movement += camera.right()
         }
-        if self.input.is_pressed(KeyCode::Space) {
+        if self.input.is_held(KeyCode::Space) {
             player.jump(8.0);
         }
         if self.input.is_held(KeyCode::Digit0) {

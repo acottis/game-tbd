@@ -77,7 +77,6 @@ impl Default for Material {
 pub struct Node {
     pub parent: Option<NodeId>,
     pub local_transform: Mat4,
-    pub mesh: Option<MeshId>,
 }
 
 pub struct Mesh {

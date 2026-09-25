@@ -203,7 +203,7 @@ fn load_node(
     };
     let world_transform = parent_world_transform * local_transform;
 
-    let mesh_index = if let Some(mesh) = node.mesh() {
+    if let Some(mesh) = node.mesh() {
         let mesh_index = mesh.index();
 
         *bounding_box =
@@ -214,16 +214,11 @@ fn load_node(
             mesh: mesh_index as MeshId,
             skin: node.skin().map(|skin| skin.index() as u32),
         });
-
-        Some(mesh_index as u32)
-    } else {
-        None
-    };
+    }
 
     nodes[index] = Node {
         parent,
         local_transform,
-        mesh: mesh_index,
     };
     world_transforms[index] = world_transform;
 
