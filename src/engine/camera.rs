@@ -57,6 +57,13 @@ impl Camera {
         (self.target - self.position).normalize_or_zero()
     }
 
+    #[inline]
+    pub fn forward_planar(&self) -> Vec3 {
+        let forward = self.forward();
+        Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero()
+    }
+
+    #[inline]
     pub fn right(&self) -> Vec3 {
         self.forward().cross(self.up).normalize_or_zero()
     }

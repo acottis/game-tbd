@@ -30,6 +30,7 @@ pub struct Entity {
     rotation: Quat,
     scale: Vec3,
     velocity: Vec3,
+    speed: f32,
     grounded: bool,
     bounding_box: BoundingBox,
     pub animation: Animation,
@@ -50,6 +51,7 @@ impl Entity {
             model,
             bounding_box: asset.bounding_box,
             animation: Animation::new(asset),
+            speed: 4.0,
         }
     }
 
@@ -61,9 +63,9 @@ impl Entity {
         self.position
     }
 
-    pub fn move_direction(&mut self, speed: f32, rotation_factor: f32, direction: Vec3) {
-        self.velocity.z = direction.z * speed;
-        self.velocity.x = direction.x * speed;
+    pub fn move_direction(&mut self, rotation_factor: f32, direction: Vec3) {
+        self.velocity.z = direction.z * self.speed;
+        self.velocity.x = direction.x * self.speed;
 
         if direction.length_squared() > 0.0 {
             let angle = direction.x.atan2(direction.z);
@@ -288,10 +290,10 @@ impl Game {
         // Movement is relative to camera direction
         let mut movement = Vec3::ZERO;
         if self.input.is_pressed(KeyCode::KeyW) {
-            movement += camera.forward();
+            movement += camera.forward_planar();
         }
         if self.input.is_pressed(KeyCode::KeyS) {
-            movement -= camera.forward()
+            movement -= camera.forward_planar()
         }
         if self.input.is_pressed(KeyCode::KeyA) {
             movement -= camera.right()
@@ -303,19 +305,7 @@ impl Game {
             player.jump(8.0);
         }
         if self.input.is_pressed(KeyCode::Digit0) {
-            player.animation.play_loop(AnimationId::Walk)
-        }
-        if self.input.is_pressed(KeyCode::ArrowUp) {
-            camera.move_forward(delta_time * 10.0)
-        }
-        if self.input.is_pressed(KeyCode::ArrowLeft) {
-            camera.strafe(delta_time * -10.0);
-        }
-        if self.input.is_pressed(KeyCode::ArrowDown) {
-            camera.move_forward(delta_time * -10.0)
-        }
-        if self.input.is_pressed(KeyCode::ArrowRight) {
-            camera.strafe(delta_time * 10.0);
+            player.animation.play_loop(AnimationId::Wave)
         }
         if self.input.is_pressed(KeyCode::KeyU) {
             camera.rotate_pitch(delta_time * PI / 2.0)
@@ -333,7 +323,7 @@ impl Game {
             return true;
         }
         let rotation_factor = (10.0 * delta_time).min(1.0);
-        player.move_direction(5.0, rotation_factor, movement);
+        player.move_direction(rotation_factor, movement);
         camera.follow(player.position());
         false
     }
@@ -345,10 +335,11 @@ impl Game {
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
-            if entity.velocity == Vec3::ZERO {
-                entity.animation.play(AnimationId::Idle);
-            } else {
-                entity.animation.play(AnimationId::Walk);
+            if entity.velocity == Vec3::ZERO && entity.animation.id() == AnimationId::Walk {
+                entity.animation.play_loop(AnimationId::Idle);
+            }
+            if entity.velocity != Vec3::ZERO {
+                entity.animation.play_loop(AnimationId::Walk);
             }
             let asset = assets.get(entity.model);
             entity.animation.update(delta_time, asset);
