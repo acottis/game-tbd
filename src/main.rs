@@ -27,7 +27,8 @@ impl Renderer {
     pub fn new(window: Window, assets: &[Asset]) -> Self {
         let window = Arc::new(window);
         let mut gpu = graphics::Gpu::new(window.clone());
-        gpu.resize(window.inner_size());
+        let PhysicalSize { width, height } = window.inner_size();
+        gpu.resize(width, height);
 
         let models = graphics::ModelSet::load(&gpu, &assets);
 
@@ -39,8 +40,8 @@ impl Renderer {
     }
 
     #[inline(always)]
-    pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        self.gpu.resize(size);
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.gpu.resize(width, height);
     }
 
     #[inline(always)]
@@ -81,12 +82,13 @@ impl App {
 
     #[inline(always)]
     fn resize(&mut self, size: PhysicalSize<u32>) {
-        if size.width == 0 || size.height == 0 {
+        let PhysicalSize { width, height } = size;
+        if width == 0 || height == 0 {
             return;
         }
         let renderer = unsafe { self.renderer.as_mut().unwrap_unchecked() };
-        renderer.resize(size);
-        self.game.camera.set_aspect_ratio(&size);
+        renderer.resize(width, height);
+        self.game.camera.set_aspect_ratio(width, height);
     }
 
     fn handle_inputs(&mut self, event_loop: &ActiveEventLoop) {

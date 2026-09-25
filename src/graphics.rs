@@ -18,12 +18,12 @@ use crate::{
     game::Game,
 };
 
-fn create_depth_view(device: &Device, size: PhysicalSize<u32>) -> TextureView {
+fn create_depth_view(device: &Device, width: u32, height: u32) -> TextureView {
     let depth_texture = device.create_texture(&TextureDescriptor {
         label: Some("Depth Texture"),
         size: Extent3d {
-            width: size.width,
-            height: size.height,
+            width,
+            height,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -265,6 +265,24 @@ impl Shadows {
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,
+        }
+    }
+
+    fn render(
+        &self,
+        encoder: &mut CommandEncoder,
+        models: &ModelSet,
+        model_renderer: &ModelRenderer,
+    ) {
+        let mut pass = encoder.begin_render_pass(&self.render_pass_descriptor());
+
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &self.camera.bind_group, &[]);
+        pass.set_bind_group(3, &model_renderer.bind_group, &[]);
+
+        for draw in &model_renderer.draws {
+            let model = models.get(draw.model_id);
+            model.draw_shadow(&mut pass, &draw.render_node, draw.transform_index);
         }
     }
 }
@@ -695,7 +713,14 @@ impl Model {
         let materials = asset
             .materials
             .iter()
-            .map(|material| Material::new(&gpu.device, &gpu.queue, &gpu.material_layout, material))
+            .map(|material| {
+                Material::new(
+                    &gpu.device,
+                    &gpu.queue,
+                    &gpu.scene.material_layout,
+                    material,
+                )
+            })
             .collect();
         Self { meshes, materials }
     }
@@ -899,7 +924,7 @@ struct Sky {
 }
 
 impl Sky {
-    fn new(device: &Device, surface_config: &SurfaceConfiguration) -> Self {
+    fn new(device: &Device, surface_format: TextureFormat) -> Self {
         let label = Some("SkyBox");
 
         let camera_layout = GpuTransform::layout(
@@ -928,7 +953,7 @@ impl Sky {
                 module: &shader,
                 entry_point: None,
                 compilation_options: Default::default(),
-                targets: &[Some(surface_config.format.into())],
+                targets: &[Some(surface_format.into())],
             }),
             primitive: Default::default(),
             depth_stencil: Some(DepthStencilState {
@@ -1151,43 +1176,30 @@ fn world_to_screen(
     ))
 }
 
-pub struct Gpu {
-    surface: Surface<'static>,
-    surface_config: SurfaceConfiguration,
-    device: Device,
-    queue: Queue,
-
-    scene_pipeline: RenderPipeline,
-    depth_view: TextureView,
-
+struct Scene {
     camera: Camera,
     models: ModelRenderer,
-
+    pipeline: RenderPipeline,
     lighting: Lighting,
     sky: Sky,
     text: Text,
-
     material_layout: BindGroupLayout,
+    depth_view: TextureView,
 }
 
-impl Gpu {
-    pub fn new(window: Arc<Window>) -> Self {
-        let window_size = window.inner_size();
-        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
-        let surface = instance.create_surface(window).unwrap();
-
-        let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
-
-        let surface_config = surface
-            .get_default_config(&adapter, window_size.width, window_size.height)
-            .unwrap();
-        surface.configure(&device, &surface_config);
-
-        let mut text = Text::new(&device, &queue, surface_config.format);
-        text.resize(&queue, window_size.width, window_size.height);
+impl Scene {
+    fn new(
+        device: &Device,
+        queue: &Queue,
+        surface_format: TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> Scene {
+        let mut text = Text::new(&device, &queue, surface_format);
+        text.resize(&queue, width, height);
 
         let camera = Camera::new(&device);
-        let sky = Sky::new(&device, &surface_config);
+        let sky = Sky::new(&device, surface_format);
 
         let models = ModelRenderer::new(&device, 64, 256);
 
@@ -1205,7 +1217,7 @@ impl Gpu {
             immediate_size: 0,
         });
         let shader = device.create_shader_module(include_wgsl!("shaders/main.wgsl"));
-        let scene_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: VertexState {
@@ -1218,7 +1230,7 @@ impl Gpu {
                 module: &shader,
                 entry_point: None,
                 compilation_options: Default::default(),
-                targets: &[Some(surface_config.format.into())],
+                targets: &[Some(surface_format.into())],
             }),
             primitive: PrimitiveState {
                 topology: PrimitiveTopology::TriangleList,
@@ -1241,46 +1253,29 @@ impl Gpu {
             cache: None,
             multiview_mask: None,
         });
-
-        let depth_view = create_depth_view(&device, window_size);
-
-        log::info!("{:#?}", adapter.get_info());
-
+        let depth_view = create_depth_view(&device, width, height);
         Self {
-            surface,
-            surface_config,
-            device,
-            queue,
-            scene_pipeline,
-            material_layout,
-            depth_view,
             camera,
             models,
+            pipeline,
             lighting,
-            text,
             sky,
+            text,
+            material_layout,
+            depth_view,
         }
-    }
-
-    pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        self.surface_config.height = size.height;
-        self.surface_config.width = size.width;
-        self.surface.configure(&self.device, &self.surface_config);
-
-        self.depth_view = create_depth_view(&self.device, size);
-
-        self.text.resize(&self.queue, size.width, size.height);
     }
 
     fn render_pass_descriptor<'tex>(
         &'tex self,
+        depth_view: &'tex TextureView,
         color_attachments: &'tex [Option<RenderPassColorAttachment<'tex>>],
     ) -> RenderPassDescriptor<'tex> {
         RenderPassDescriptor {
             label: Some("Render"),
             color_attachments,
             depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &self.depth_view,
+                view: &depth_view,
                 depth_ops: Some(Operations {
                     load: LoadOp::Clear(1.0),
                     store: StoreOp::Store,
@@ -1293,21 +1288,10 @@ impl Gpu {
         }
     }
 
-    fn render_shadows(&self, encoder: &mut CommandEncoder, models: &ModelSet, draws: &[ModelDraw]) {
-        let mut pass = encoder.begin_render_pass(&self.lighting.shadows.render_pass_descriptor());
+    fn render(&self, encoder: &mut CommandEncoder, view: &TextureView, models: &ModelSet) {
+        self.lighting.shadows.render(encoder, models, &self.models);
 
-        pass.set_pipeline(&self.lighting.shadows.pipeline);
-        pass.set_bind_group(0, &self.lighting.shadows.camera.bind_group, &[]);
-        pass.set_bind_group(3, &self.models.bind_group, &[]);
-
-        for draw in draws {
-            let model = models.get(draw.model_id);
-            model.draw_shadow(&mut pass, &draw.render_node, draw.transform_index);
-        }
-    }
-
-    fn render_scene(&self, encoder: &mut CommandEncoder, view: &TextureView, models: &ModelSet) {
-        let color_attachments = [Some(RenderPassColorAttachment {
+        let color_attachments = &[Some(RenderPassColorAttachment {
             view,
             resolve_target: None,
             ops: Operations {
@@ -1317,9 +1301,10 @@ impl Gpu {
             depth_slice: None,
         })];
 
-        let mut pass = encoder.begin_render_pass(&self.render_pass_descriptor(&color_attachments));
+        let mut pass = encoder
+            .begin_render_pass(&self.render_pass_descriptor(&self.depth_view, color_attachments));
 
-        pass.set_pipeline(&self.scene_pipeline);
+        pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.camera.transform.bind_group, &[]);
         pass.set_bind_group(1, &self.lighting.bind_group, &[]);
         pass.set_bind_group(3, &self.models.bind_group, &[]);
@@ -1332,17 +1317,78 @@ impl Gpu {
             .unwrap();
     }
 
+    #[inline(always)]
+    fn resize(&mut self, device: &Device, queue: &Queue, width: u32, height: u32) {
+        self.text.resize(&queue, width, height);
+        self.depth_view = create_depth_view(device, width, height);
+    }
+
+    fn prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        width: u32,
+        height: u32,
+        game: &Game,
+        assets: &AssetSet,
+    ) {
+        self.camera.prepare(queue, game);
+        self.sky.prepare(queue, game);
+        self.lighting.prepare(queue, game);
+        self.models.prepare(device, queue, game, assets);
+        self.text.prepare(device, queue, width, height, game);
+    }
+}
+
+pub struct Gpu {
+    surface: Surface<'static>,
+    surface_config: SurfaceConfiguration,
+    device: Device,
+    queue: Queue,
+
+    scene: Scene,
+}
+
+impl Gpu {
+    pub fn new(window: Arc<Window>) -> Self {
+        let PhysicalSize { width, height } = window.inner_size();
+        let instance = Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
+        let surface = instance.create_surface(window).unwrap();
+
+        let (adapter, device, queue) = pollster::block_on(init_wgpu(&instance, &surface));
+
+        let surface_config = surface.get_default_config(&adapter, width, height).unwrap();
+        surface.configure(&device, &surface_config);
+
+        let scene = Scene::new(&device, &queue, surface_config.format, width, height);
+
+        log::info!("{:#?}", adapter.get_info());
+
+        Self {
+            surface,
+            surface_config,
+            device,
+            queue,
+            scene,
+        }
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.surface_config.height = height;
+        self.surface_config.width = width;
+        self.surface.configure(&self.device, &self.surface_config);
+
+        self.scene.resize(&self.device, &self.queue, width, height);
+    }
+
     pub fn render(&mut self, window: &Window, game: &Game, models: &ModelSet, assets: &AssetSet) {
-        self.camera.prepare(&self.queue, game);
-        self.sky.prepare(&self.queue, game);
-        self.lighting.prepare(&self.queue, game);
-        self.models.prepare(&self.device, &self.queue, game, assets);
-        self.text.prepare(
+        self.scene.prepare(
             &self.device,
             &self.queue,
             self.surface_config.width,
             self.surface_config.height,
             game,
+            assets,
         );
 
         let frame = match self.surface.get_current_texture() {
@@ -1353,8 +1399,7 @@ impl Gpu {
         let view = &frame.texture.create_view(&Default::default());
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.render_shadows(&mut encoder, models, &self.models.draws);
-        self.render_scene(&mut encoder, view, models);
+        self.scene.render(&mut encoder, view, models);
 
         self.queue.submit([encoder.finish()]);
         window.pre_present_notify();

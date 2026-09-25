@@ -37,8 +37,8 @@ impl Camera {
         }
     }
 
-    pub fn set_aspect_ratio(&mut self, size: &PhysicalSize<u32>) {
-        self.aspect = size.width as f32 / size.height as f32
+    pub fn set_aspect_ratio(&mut self, width: u32, height: u32) {
+        self.aspect = width as f32 / height as f32
     }
 
     pub fn target(&self) -> Vec3 {
