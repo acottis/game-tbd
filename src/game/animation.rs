@@ -47,55 +47,73 @@ impl Animation {
     }
 
     #[inline(always)]
-    pub fn play(&mut self, id: AnimationId) {
-        if self.layers.base.id == id {
-            return;
-        }
-        self.layers.base = Layer::new(id, 1.0, false);
-    }
-
-    #[inline(always)]
     pub fn add_layer(&mut self, id: AnimationId, weight: f32, looping: bool) {
         self.layers.add(id, weight, looping)
     }
 
-    #[inline(always)]
-    pub fn play_loop(&mut self, id: AnimationId) {
-        if self.layers.base.id == id {
-            return;
-        }
-        self.layers.base = Layer::new(id, 1.0, true);
+    pub fn crossfade_loop(&mut self, id: AnimationId, duration: f32) {
+        self.layers.base.crossfade_to(id, true, duration);
     }
 
-    #[inline(always)]
-    pub fn is_playing(&self, id: AnimationId) -> bool {
-        if self.layers.base.id == id {
-            return true;
-        }
-        self.layers.iter().any(|layer| layer.id == id)
-    }
-
+    // TOOD: War crime perf
     pub fn update(&mut self, delta_time: f32, asset: &Asset) {
         let base = &mut self.layers.base;
-        if let Some(clip) = asset.animations.get(base.id) {
-            base.update(delta_time, clip);
-            self.pose.sample(asset, clip, base.time);
-        } else if base.need_reset {
-            log::warn!("Base Clip not found {:?}", base.id);
-            self.pose.reset_to_rest(asset);
-            base.need_reset = false;
-        };
 
+        let clip = asset.animations.get(base.id);
+
+        // TODO: Avoiding the borrowchecker lol
+        if let Some(clip) = clip {
+            base.update(delta_time, clip);
+        }
+
+        match base.crossfade {
+            Some(ref mut crossfade) => {
+                crossfade.update(delta_time);
+
+                // Previous animation. Fallback is rest pose
+                if let Some(previous_clip) = asset.animations.get(crossfade.id) {
+                    self.pose.sample(asset, previous_clip, crossfade.time);
+                } else {
+                    log::warn!("1. Base Clip missing: {:?}", base.id);
+                    self.pose.sample_rest(asset);
+                }
+
+                // Previous animation. Fallback is rest pose
+                if let Some(clip) = clip {
+                    self.scratch_pose.sample(asset, clip, base.time);
+                } else {
+                    log::warn!("2. Base Clip missing: {:?}", base.id);
+                    self.scratch_pose.sample_rest(asset);
+                }
+
+                self.pose.blend(&self.scratch_pose, crossfade.weight());
+                if crossfade.finished() {
+                    base.crossfade = None;
+                }
+            }
+            None => {
+                if let Some(clip) = clip {
+                    self.pose.sample(asset, clip, base.time);
+                } else {
+                    log::warn!("3. Base Clip missing: {:?}", base.id);
+                    self.pose.sample_rest(asset);
+                }
+            }
+        }
+
+        // Blend layers into base
         for layer in self.layers.iter_mut() {
             if let Some(clip) = asset.animations.get(layer.id) {
                 layer.update(delta_time, clip);
                 self.scratch_pose.sample(asset, clip, layer.time);
-                self.pose.blend_into(&self.scratch_pose, layer.weight);
+                self.pose.blend(&self.scratch_pose, layer.weight);
             };
         }
+
         // Remove finished layers
         self.layers.inner.retain(|layer| !layer.finished(asset));
 
+        // Update the pose and then joints
         self.pose.update(asset);
         for (skin, skin_pose) in asset.skins.iter().zip(&mut self.skin_poses) {
             skin_pose.update(skin, &self.pose);
@@ -116,9 +134,6 @@ impl Layers {
             inner: Vec::with_capacity(4),
         }
     }
-    fn iter(&self) -> impl Iterator<Item = &Layer> {
-        self.inner.iter()
-    }
 
     fn iter_mut(&mut self) -> impl Iterator<Item = &mut Layer> {
         self.inner.iter_mut()
@@ -138,23 +153,53 @@ impl Layers {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct Crossfade {
+    id: AnimationId,
+    time: f32,
+    progress: f32,
+    duration: f32,
+}
+
+impl Crossfade {
+    #[inline(always)]
+    fn update(&mut self, delta_time: f32) {
+        self.progress += delta_time;
+        self.time += delta_time;
+    }
+
+    #[inline(always)]
+    fn weight(&self) -> f32 {
+        if self.duration <= 0.0 {
+            1.0
+        } else {
+            (self.progress / self.duration).clamp(0.0, 1.0)
+        }
+    }
+
+    #[inline(always)]
+    fn finished(&self) -> bool {
+        self.progress >= self.duration
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 struct Layer {
     id: AnimationId,
     time: f32,
     weight: f32,
     looping: bool,
-    // TODO: Think about this
-    need_reset: bool,
+    crossfade: Option<Crossfade>,
 }
 
 impl Layer {
+    #[inline(always)]
     fn new(id: AnimationId, weight: f32, looping: bool) -> Self {
         Self {
             id,
             time: 0.0,
             weight,
             looping,
-            need_reset: true,
+            crossfade: None,
         }
     }
 
@@ -167,12 +212,38 @@ impl Layer {
         !self.looping && self.time >= clip.duration()
     }
 
+    #[inline(always)]
     fn update(&mut self, delta_time: f32, clip: &AnimationClip) {
         self.time += delta_time;
 
         if self.looping && clip.duration() > 0.0 {
             self.time %= clip.duration();
         }
+    }
+
+    fn crossfade_to(&mut self, id: AnimationId, looping: bool, duration: f32) {
+        // Ignore requests to crossfade to the current animation being played
+        if self.id == id {
+            return;
+        }
+
+        // Ignore additional requests to crossfade to current target animation
+        if let Some(crossfade) = self.crossfade {
+            if crossfade.id == id {
+                return;
+            }
+        }
+
+        self.crossfade = Some(Crossfade {
+            id: self.id,
+            time: self.time,
+            progress: 0.0,
+            duration,
+        });
+
+        self.id = id;
+        self.time = 0.0;
+        self.looping = looping;
     }
 }
 

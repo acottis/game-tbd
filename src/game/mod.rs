@@ -84,7 +84,6 @@ impl Entity {
 
         self.grounded = false;
         self.velocity.y = velocity;
-        self.animation.play(AnimationId::Jump);
     }
 
     #[inline(always)]
@@ -109,11 +108,6 @@ impl Entity {
     fn ground(&mut self) {
         self.velocity.y = 0.0;
         self.grounded = true;
-
-        // TODO: This needs some thought
-        if self.animation.is_playing(AnimationId::Jump) {
-            self.animation.play(AnimationId::Idle);
-        }
     }
 
     #[inline(always)]
@@ -323,7 +317,7 @@ impl Game {
             player.jump(8.0);
         }
         if self.input.is_pressed(KeyCode::Digit0) {
-            player.animation.add_layer(AnimationId::Wave, 0.5, false);
+            player.animation.add_layer(AnimationId::Wave, 0.75, false);
         }
         if self.input.is_pressed(KeyCode::Digit9) {
             player.toggle_helmet();
@@ -360,11 +354,9 @@ impl Game {
 
         for entity in &mut self.entities {
             if entity.velocity == Vec3::ZERO {
-                if entity.animation.is_playing(AnimationId::Walk) {
-                    entity.animation.play_loop(AnimationId::Idle);
-                }
+                entity.animation.crossfade_loop(AnimationId::Idle, 0.3);
             } else {
-                entity.animation.play_loop(AnimationId::Walk);
+                entity.animation.crossfade_loop(AnimationId::Walk, 0.6);
             }
 
             let asset = assets.get(entity.model);

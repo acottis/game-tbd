@@ -420,8 +420,8 @@ impl ModelRenderer {
             let asset = assets.get(entity.model);
 
             for render_node in entity.visible_render_nodes(asset) {
-                let node_world = entity_world
-                    * entity.animation.pose.world_transforms[render_node.node as usize];
+                let node_world =
+                    entity_world * entity.animation.pose.world[render_node.node as usize];
 
                 let transform = match render_node.skin {
                     Some(skin_index) => {

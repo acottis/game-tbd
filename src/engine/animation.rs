@@ -203,7 +203,7 @@ impl SkinPose {
 
     pub fn update(&mut self, skeleton: &Skin, pose: &Pose) {
         for (index, joint) in skeleton.joints.iter().enumerate() {
-            self.matrices[index] = pose.world_transforms[joint.node as usize] * joint.inverse_bind;
+            self.matrices[index] = pose.world[joint.node as usize] * joint.inverse_bind;
         }
     }
 }
@@ -211,35 +211,29 @@ impl SkinPose {
 #[derive(Debug, Clone)]
 pub struct Pose {
     /// What gets send to the GPU
-    pub world_transforms: Vec<Mat4>,
+    pub world: Vec<Mat4>,
     /// Our current
-    pub local_transforms: Vec<LocalTransform>,
+    local: Vec<LocalTransform>,
 }
 
 impl Pose {
     pub fn new(asset: &Asset) -> Self {
-        let local_transforms = asset
-            .nodes
-            .iter()
-            .map(|node| node.local_transform)
-            .collect();
         Self {
-            world_transforms: vec![Mat4::IDENTITY; asset.nodes.len()],
-            local_transforms,
+            world: vec![Mat4::IDENTITY; asset.nodes.len()],
+            local: asset
+                .nodes
+                .iter()
+                .map(|node| node.local_transform)
+                .collect(),
         }
     }
 
     pub fn blend_masked(&mut self, other: &Pose, mask: &BoneMask, weight: f32) {
-        debug_assert_eq!(self.local_transforms.len(), other.local_transforms.len());
+        debug_assert_eq!(self.local.len(), other.local.len());
 
-        debug_assert_eq!(self.local_transforms.len(), mask.weights.len());
+        debug_assert_eq!(self.local.len(), mask.weights.len());
 
-        for ((a, b), &mask_weight) in self
-            .local_transforms
-            .iter_mut()
-            .zip(&other.local_transforms)
-            .zip(&mask.weights)
-        {
+        for ((a, b), &mask_weight) in self.local.iter_mut().zip(&other.local).zip(&mask.weights) {
             let weight = weight * mask_weight;
 
             if weight > 0.0 {
@@ -248,14 +242,10 @@ impl Pose {
         }
     }
 
-    pub fn blend_into(&mut self, other: &Pose, weight: f32) {
-        debug_assert_eq!(self.local_transforms.len(), other.local_transforms.len(),);
+    pub fn blend(&mut self, other: &Pose, weight: f32) {
+        debug_assert_eq!(self.local.len(), other.local.len(),);
 
-        for (a, b) in self
-            .local_transforms
-            .iter_mut()
-            .zip(&other.local_transforms)
-        {
+        for (a, b) in self.local.iter_mut().zip(&other.local) {
             *a = (*a).blend(*b, weight);
         }
     }
@@ -263,26 +253,24 @@ impl Pose {
         for &index in asset.node_order.iter() {
             let node = &asset.nodes[index as usize];
 
-            let local = self.local_transforms[index as usize].to_mat4();
+            let local = self.local[index as usize].to_mat4();
 
-            self.world_transforms[index as usize] = match node.parent {
-                Some(parent) => self.world_transforms[parent as usize] * local,
+            self.world[index as usize] = match node.parent {
+                Some(parent) => self.world[parent as usize] * local,
                 None => local,
             };
         }
     }
 
-    pub fn sample(&mut self, asset: &Asset, animation: &AnimationClip, time: f32) {
-        for &node_id in &asset.node_order {
-            let index = node_id as usize;
-            let node = &asset.nodes[index];
-            self.local_transforms[index] = node.local_transform;
-            animation.sample_node(index as u32, &mut self.local_transforms[index], time);
+    pub fn sample(&mut self, asset: &Asset, clip: &AnimationClip, time: f32) {
+        for (index, (pose, node)) in self.local.iter_mut().zip(&asset.nodes).enumerate() {
+            *pose = node.local_transform;
+            clip.sample_node(index as u32, pose, time);
         }
     }
 
-    pub fn reset_to_rest(&mut self, asset: &Asset) {
-        for (pose, node) in self.local_transforms.iter_mut().zip(&asset.nodes) {
+    pub fn sample_rest(&mut self, asset: &Asset) {
+        for (pose, node) in self.local.iter_mut().zip(&asset.nodes) {
             *pose = node.local_transform;
         }
     }
