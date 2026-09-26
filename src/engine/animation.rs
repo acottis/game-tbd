@@ -5,16 +5,11 @@ use crate::assets::{Asset, NodeId};
 
 // TODO: Perf
 fn keyframes(times: &[f32], time: f32) -> (usize, usize, f32) {
-    if times.len() <= 1 {
-        return (0, 0, 0.0);
-    }
-
-    if time <= times[0] {
+    if times.len() <= 1 || time <= times[0] {
         return (0, 0, 0.0);
     }
 
     let last = times.len() - 1;
-
     if time >= times[last] {
         return (last, last, 0.0);
     }
@@ -46,6 +41,40 @@ fn sample_quat(interpolation: Interpolation, times: &[f32], values: &[Quat], tim
         Interpolation::Step => values[i0],
         Interpolation::Linear => values[i0].slerp(values[i1], t),
         Interpolation::CubicSpline => todo!("Cubic spline"),
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LocalTransform {
+    pub translation: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
+}
+
+impl LocalTransform {
+    #[inline(always)]
+    pub fn from_mat4(matrix: Mat4) -> Self {
+        let (scale, rotation, translation) = matrix.to_scale_rotation_translation();
+
+        Self {
+            translation,
+            rotation,
+            scale,
+        }
+    }
+
+    #[inline(always)]
+    pub fn to_mat4(self) -> Mat4 {
+        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
+    }
+
+    #[inline(always)]
+    pub fn blend(self, other: Self, weight: f32) -> Self {
+        Self {
+            translation: self.translation.lerp(other.translation, weight),
+            rotation: self.rotation.slerp(other.rotation, weight),
+            scale: self.scale.lerp(other.scale, weight),
+        }
     }
 }
 
@@ -123,25 +152,23 @@ impl AnimationClip {
 }
 
 impl AnimationClip {
-    pub fn sample_node(&self, index: u32, base_transform: Mat4, time: f32) -> Mat4 {
+    pub fn sample_node(&self, index: u32, transform: &mut LocalTransform, time: f32) {
         let Some(ref node) = self.nodes[index as usize] else {
-            return base_transform;
+            return;
         };
 
-        let (mut translation, mut rotation, mut scale) =
-            base_transform.to_scale_rotation_translation();
-
         if let Some(channel) = &node.translation {
-            translation = sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
+            transform.translation =
+                sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
         }
         if let Some(channel) = &node.rotation {
-            rotation = sample_quat(channel.interpolation, &channel.times, &channel.values, time);
+            transform.rotation =
+                sample_quat(channel.interpolation, &channel.times, &channel.values, time);
         }
         if let Some(channel) = &node.scale {
-            scale = sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
+            transform.scale =
+                sample_vec3(channel.interpolation, &channel.times, &channel.values, time);
         }
-
-        Mat4::from_scale_rotation_translation(scale, rotation, translation)
     }
 }
 
@@ -183,29 +210,97 @@ impl SkinPose {
 
 #[derive(Debug, Clone)]
 pub struct Pose {
+    /// What gets send to the GPU
     pub world_transforms: Vec<Mat4>,
+    /// Our current
+    pub local_transforms: Vec<LocalTransform>,
 }
 
 impl Pose {
-    pub fn new(world_transforms: &[Mat4]) -> Self {
+    pub fn new(asset: &Asset) -> Self {
+        let local_transforms = asset
+            .nodes
+            .iter()
+            .map(|node| node.local_transform)
+            .collect();
         Self {
-            world_transforms: world_transforms.into(),
+            world_transforms: vec![Mat4::IDENTITY; asset.nodes.len()],
+            local_transforms,
         }
     }
 
-    pub fn update(&mut self, asset: &Asset, animation: &AnimationClip, mut time: f32) {
-        // Loop animation if run for longer than duration
-        if animation.duration > 0.0 {
-            time %= animation.duration;
-        }
+    pub fn blend_masked(&mut self, other: &Pose, mask: &BoneMask, weight: f32) {
+        debug_assert_eq!(self.local_transforms.len(), other.local_transforms.len());
 
-        for index in asset.node_order.iter().cloned() {
+        debug_assert_eq!(self.local_transforms.len(), mask.weights.len());
+
+        for ((a, b), &mask_weight) in self
+            .local_transforms
+            .iter_mut()
+            .zip(&other.local_transforms)
+            .zip(&mask.weights)
+        {
+            let weight = weight * mask_weight;
+
+            if weight > 0.0 {
+                *a = (*a).blend(*b, weight);
+            }
+        }
+    }
+
+    pub fn blend_into(&mut self, other: &Pose, weight: f32) {
+        debug_assert_eq!(self.local_transforms.len(), other.local_transforms.len(),);
+
+        for (a, b) in self
+            .local_transforms
+            .iter_mut()
+            .zip(&other.local_transforms)
+        {
+            *a = (*a).blend(*b, weight);
+        }
+    }
+    pub fn update(&mut self, asset: &Asset) {
+        for &index in asset.node_order.iter() {
             let node = &asset.nodes[index as usize];
-            let local_transform = animation.sample_node(index as u32, node.local_transform, time);
+
+            let local = self.local_transforms[index as usize].to_mat4();
+
             self.world_transforms[index as usize] = match node.parent {
-                Some(parent) => self.world_transforms[parent as usize] * local_transform,
-                None => local_transform,
+                Some(parent) => self.world_transforms[parent as usize] * local,
+                None => local,
             };
         }
+    }
+
+    pub fn sample(&mut self, asset: &Asset, animation: &AnimationClip, time: f32) {
+        for &node_id in &asset.node_order {
+            let index = node_id as usize;
+            let node = &asset.nodes[index];
+            self.local_transforms[index] = node.local_transform;
+            animation.sample_node(index as u32, &mut self.local_transforms[index], time);
+        }
+    }
+
+    pub fn reset_to_rest(&mut self, asset: &Asset) {
+        for (pose, node) in self.local_transforms.iter_mut().zip(&asset.nodes) {
+            *pose = node.local_transform;
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BoneMask {
+    weights: Vec<f32>,
+}
+
+impl BoneMask {
+    pub fn new(asset: &Asset) -> Self {
+        Self {
+            weights: vec![0.0; asset.nodes.len()],
+        }
+    }
+
+    pub fn set(&mut self, node: NodeId, weight: f32) {
+        self.weights[node as usize] = weight;
     }
 }

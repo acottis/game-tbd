@@ -7,7 +7,10 @@ pub use gltf::load;
 use image::DynamicImage;
 
 use crate::{
-    engine::{animation::Skin, physics::BoundingBox},
+    engine::{
+        animation::{LocalTransform, Skin},
+        physics::BoundingBox,
+    },
     game::animation::AnimationSet,
     graphics::Vertex,
 };
@@ -76,7 +79,7 @@ impl Default for Material {
 #[derive(Debug, Clone, Default)]
 pub struct Node {
     pub parent: Option<NodeId>,
-    pub local_transform: Mat4,
+    pub local_transform: LocalTransform,
 }
 
 pub struct Mesh {

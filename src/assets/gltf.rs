@@ -8,12 +8,31 @@ use image::{DynamicImage, ImageFormat};
 use crate::assets::{Asset, MaterialId, MeshId, Node, NodeId, RenderNode};
 use crate::assets::{Material, Mesh, Primitive};
 use crate::engine::animation::{
-    AnimationClip, Joint, NodeAnimation, Rotation, Scale, Skin, Translation,
+    AnimationClip, Joint, LocalTransform, NodeAnimation, Rotation, Scale, Skin, Translation,
 };
 use crate::engine::physics::BoundingBox;
 use crate::game::animation::{AnimationId, AnimationSet};
 use crate::graphics::Vertex;
 
+impl From<&gltf::Node<'_>> for LocalTransform {
+    fn from(node: &gltf::Node<'_>) -> Self {
+        match node.transform() {
+            gltf::scene::Transform::Decomposed {
+                translation,
+                rotation,
+                scale,
+            } => Self {
+                translation: Vec3::from(translation),
+                rotation: Quat::from_array(rotation),
+                scale: Vec3::from(scale),
+            },
+
+            gltf::scene::Transform::Matrix { matrix } => {
+                Self::from_mat4(Mat4::from_cols_array_2d(&matrix))
+            }
+        }
+    }
+}
 fn load_texture(info: Option<Info>, buffer: &[Data]) -> Option<DynamicImage> {
     if let Some(info) = info {
         let image = info.texture().source().source();
@@ -186,7 +205,7 @@ fn load_node(
     nodes: &mut [Node],
     node_order: &mut Vec<NodeId>,
     render_nodes: &mut Vec<RenderNode>,
-    world_transforms: &mut [Mat4],
+    rest_world_transforms: &mut [Mat4],
     bounding_box: &mut BoundingBox,
     node: gltf::Node,
     meshes: &[Mesh],
@@ -195,13 +214,13 @@ fn load_node(
     let index = node.index();
     node_order.push(index as NodeId);
 
-    let local_transform = Mat4::from_cols_array_2d(&node.transform().matrix());
+    let local_transform = LocalTransform::from(&node);
 
     let parent_world_transform = match parent {
-        Some(parent) => world_transforms[parent as usize],
+        Some(parent) => rest_world_transforms[parent as usize],
         None => Mat4::IDENTITY,
     };
-    let world_transform = parent_world_transform * local_transform;
+    let world_transform = parent_world_transform * local_transform.to_mat4();
 
     if let Some(mesh) = node.mesh() {
         let mesh_index = mesh.index();
@@ -220,14 +239,14 @@ fn load_node(
         parent,
         local_transform,
     };
-    world_transforms[index] = world_transform;
+    rest_world_transforms[index] = world_transform;
 
     for child in node.children() {
         load_node(
             nodes,
             node_order,
             render_nodes,
-            world_transforms,
+            rest_world_transforms,
             bounding_box,
             child,
             meshes,

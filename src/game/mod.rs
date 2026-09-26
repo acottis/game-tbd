@@ -111,7 +111,7 @@ impl Entity {
         self.grounded = true;
 
         // TODO: This needs some thought
-        if self.animation.id() == AnimationId::Jump {
+        if self.animation.is_playing(AnimationId::Jump) {
             self.animation.play(AnimationId::Idle);
         }
     }
@@ -322,8 +322,8 @@ impl Game {
         if self.input.is_held(KeyCode::Space) {
             player.jump(8.0);
         }
-        if self.input.is_held(KeyCode::Digit0) {
-            player.animation.play_loop(AnimationId::Wave)
+        if self.input.is_pressed(KeyCode::Digit0) {
+            player.animation.add_layer(AnimationId::Wave, true, 0.5);
         }
         if self.input.is_pressed(KeyCode::Digit9) {
             player.toggle_helmet();
@@ -359,7 +359,7 @@ impl Game {
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
-            if entity.velocity == Vec3::ZERO && entity.animation.id() == AnimationId::Walk {
+            if entity.velocity == Vec3::ZERO && entity.animation.is_playing(AnimationId::Walk) {
                 entity.animation.play_loop(AnimationId::Idle);
             }
             if entity.velocity != Vec3::ZERO {

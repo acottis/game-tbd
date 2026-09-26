@@ -31,75 +31,80 @@ impl TryFrom<&str> for AnimationId {
 }
 
 pub struct Animation {
-    state: State,
-    pub pose: Pose,
     pub skin_poses: Vec<SkinPose>,
+    pub pose: Pose,
+    scratch_pose: Pose,
+    layers: Vec<Layer>,
 }
 impl Animation {
     pub fn new(asset: &Asset) -> Self {
+        let mut layers = Vec::with_capacity(4);
+        layers.push(Layer::new(AnimationId::Idle, 1.0, true));
         Self {
-            state: State::new(AnimationId::Idle),
+            layers,
             skin_poses: asset.skins.iter().map(SkinPose::new).collect(),
-            pose: Pose::new(&asset.rest_world_transforms),
+            pose: Pose::new(asset),
+            scratch_pose: Pose::new(asset),
         }
     }
 
     #[inline(always)]
     pub fn play(&mut self, id: AnimationId) {
-        self.state.play(id, false);
+        if self.layers[0].id == id {
+            return;
+        }
+        self.layers[0] = Layer::new(id, 1.0, false);
+    }
+
+    #[inline(always)]
+    pub fn add_layer(&mut self, id: AnimationId, looping: bool, weight: f32) {
+        if let Some(layer) = self.layers.iter_mut().find(|layer| layer.id == id) {
+            layer.time = 0.0;
+            layer.looping = looping;
+            layer.weight = weight;
+            return;
+        }
+
+        self.layers.push(Layer::new(id, weight, looping));
     }
 
     #[inline(always)]
     pub fn play_loop(&mut self, id: AnimationId) {
-        self.state.play(id, true);
+        if self.layers[0].id == id {
+            return;
+        }
+        self.layers[0] = Layer::new(id, 1.0, true);
     }
 
     #[inline(always)]
-    pub fn id(&self) -> AnimationId {
-        self.state.id
+    pub fn is_playing(&self, id: AnimationId) -> bool {
+        self.layers.iter().any(|layer| layer.id == id)
     }
 
     pub fn update(&mut self, delta_time: f32, asset: &Asset) {
-        self.state.update(delta_time);
+        for layer in &mut self.layers {
+            if let Some(clip) = asset.animations.get(layer.id) {
+                layer.update(delta_time, clip);
+            };
+        }
 
-        // If the asset has the AnimateID available carry on
-        let Some(mut clip) = asset.animations.get(self.state.id) else {
-            // AnimationClip is missing
-            // But its not dirty so do nothing
-            if !self.state.dirty {
-                // If its dirty update to default pose
-                self.reset_pose(asset);
-                // Prevent this running every frame
-                self.state.dirty = true;
-            }
-            return;
+        let base = &mut self.layers[0];
+        if let Some(clip) = asset.animations.get(base.id) {
+            self.pose.sample(asset, clip, base.time);
+        } else if base.needs_reset {
+            log::warn!("Base Clip not found {:?}", base.id);
+            self.pose.reset_to_rest(asset);
+            base.needs_reset = false;
         };
 
-        if !self.state.looping && self.state.current_time >= clip.duration() {
-            self.state.id = AnimationId::Idle;
-            self.state.current_time = 0.0;
-
-            // Update immediately to avoid doing the old animation
-            // for an additional frame
-            let Some(idle_clip) = asset.animations.get(self.state.id) else {
-                self.reset_pose(asset);
-                return;
-            };
-
-            clip = idle_clip;
+        for layer in self.layers.iter().skip(1) {
+            if let Some(clip) = asset.animations.get(layer.id) {
+                self.scratch_pose.sample(asset, clip, layer.time);
+                self.pose.blend_into(&self.scratch_pose, layer.weight);
+            }
         }
 
-        self.pose.update(&asset, clip, self.state.current_time);
-
-        for (skin, skin_pose) in asset.skins.iter().zip(&mut self.skin_poses) {
-            skin_pose.update(skin, &self.pose);
-        }
-    }
-
-    fn reset_pose(&mut self, asset: &Asset) {
-        self.pose
-            .world_transforms
-            .copy_from_slice(&asset.rest_world_transforms);
+        self.pose.update(asset);
 
         for (skin, skin_pose) in asset.skins.iter().zip(&mut self.skin_poses) {
             skin_pose.update(skin, &self.pose);
@@ -107,39 +112,33 @@ impl Animation {
     }
 }
 
-struct State {
+#[derive(Debug, Clone, Copy)]
+struct Layer {
     id: AnimationId,
-    current_time: f32,
+    time: f32,
+    weight: f32,
     looping: bool,
-    /// Tracks if we change [AnimationId] to stop us repeatidly
-    /// reseting on an asset not having the [AnimationClip] for
-    /// that [AnimationId]
-    dirty: bool,
+    // TODO: Think about this
+    needs_reset: bool,
 }
 
-impl State {
-    const fn new(id: AnimationId) -> Self {
+impl Layer {
+    fn new(id: AnimationId, weight: f32, looping: bool) -> Self {
         Self {
             id,
-            current_time: 0.0,
-            dirty: false,
-            looping: false,
+            time: 0.0,
+            weight,
+            looping,
+            needs_reset: true,
         }
     }
 
-    fn play(&mut self, id: AnimationId, looping: bool) {
-        if self.id == id {
-            return;
+    fn update(&mut self, delta_time: f32, clip: &AnimationClip) {
+        self.time += delta_time;
+
+        if self.looping && clip.duration() > 0.0 {
+            self.time %= clip.duration();
         }
-
-        self.id = id;
-        self.current_time = 0.0;
-        self.dirty = false;
-        self.looping = looping
-    }
-
-    fn update(&mut self, delta_time: f32) {
-        self.current_time += delta_time
     }
 }
 
