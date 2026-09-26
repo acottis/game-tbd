@@ -323,7 +323,7 @@ impl Game {
             player.jump(8.0);
         }
         if self.input.is_pressed(KeyCode::Digit0) {
-            player.animation.add_layer(AnimationId::Wave, 0.5, true);
+            player.animation.add_layer(AnimationId::Wave, 0.5, false);
         }
         if self.input.is_pressed(KeyCode::Digit9) {
             player.toggle_helmet();

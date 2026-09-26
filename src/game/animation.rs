@@ -76,31 +76,27 @@ impl Animation {
     }
 
     pub fn update(&mut self, delta_time: f32, asset: &Asset) {
-        for layer in self.layers.iter_mut() {
-            if let Some(clip) = asset.animations.get(layer.id) {
-                layer.update(delta_time, clip);
-            };
-        }
-
         let base = &mut self.layers.base;
         if let Some(clip) = asset.animations.get(base.id) {
             base.update(delta_time, clip);
             self.pose.sample(asset, clip, base.time);
-        } else if base.needs_reset {
+        } else if base.need_reset {
             log::warn!("Base Clip not found {:?}", base.id);
             self.pose.reset_to_rest(asset);
-            base.needs_reset = false;
+            base.need_reset = false;
         };
 
-        for layer in self.layers.iter() {
+        for layer in self.layers.iter_mut() {
             if let Some(clip) = asset.animations.get(layer.id) {
+                layer.update(delta_time, clip);
                 self.scratch_pose.sample(asset, clip, layer.time);
                 self.pose.blend_into(&self.scratch_pose, layer.weight);
-            }
+            };
         }
+        // Remove finished layers
+        self.layers.inner.retain(|layer| !layer.finished(asset));
 
         self.pose.update(asset);
-
         for (skin, skin_pose) in asset.skins.iter().zip(&mut self.skin_poses) {
             skin_pose.update(skin, &self.pose);
         }
@@ -148,7 +144,7 @@ struct Layer {
     weight: f32,
     looping: bool,
     // TODO: Think about this
-    needs_reset: bool,
+    need_reset: bool,
 }
 
 impl Layer {
@@ -158,13 +154,17 @@ impl Layer {
             time: 0.0,
             weight,
             looping,
-            needs_reset: true,
+            need_reset: true,
         }
     }
 
     #[inline(always)]
-    fn finished(&self, clip: &AnimationClip) -> bool {
-        !self.looping && self.time > clip.duration()
+    fn finished(&self, asset: &Asset) -> bool {
+        let Some(clip) = asset.animations.get(self.id) else {
+            return true;
+        };
+
+        !self.looping && self.time >= clip.duration()
     }
 
     fn update(&mut self, delta_time: f32, clip: &AnimationClip) {
