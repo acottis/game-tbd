@@ -67,12 +67,12 @@ pub struct Animation {
     next_pose: Pose,
     current: Playback,
     crossfade: Option<Crossfade>,
-    layers: Layers,
+    layers: Vec<Layer>,
 }
 impl Animation {
     pub fn new(asset: &Asset) -> Self {
         Self {
-            layers: Layers::new(),
+            layers: Vec::with_capacity(8),
             skin_poses: asset.skins.iter().map(SkinPose::new).collect(),
             pose: Pose::new(asset),
             next_pose: Pose::new(asset),
@@ -83,7 +83,13 @@ impl Animation {
 
     #[inline(always)]
     pub fn add_layer(&mut self, id: AnimationId, weight: f32, looping: bool) {
-        self.layers.add(id, weight, looping)
+        if let Some(layer) = self.layers.iter_mut().find(|layer| layer.playback.id == id) {
+            layer.playback.time = 0.0;
+            layer.playback.looping = looping;
+            layer.weight = weight;
+        } else {
+            self.layers.push(Layer::new(id, weight, looping));
+        }
     }
 
     pub fn crossfade_loop(&mut self, id: AnimationId, duration: f32) {
@@ -106,21 +112,25 @@ impl Animation {
         });
     }
 
-    // TOOD: War crime perf
+    // TOOD: War crime perf with sample_rest not being cached
+    // many copies for fun on slightly happier paths but I
+    // dont see what I can do about it.
     pub fn update(&mut self, delta_time: f32, asset: &Asset) {
         let clip = asset.animations.get(self.current.id);
 
-        // TODO: Avoiding the borrowchecker lol
+        // TODO: Is this good? Early exit
         if let Some(clip) = clip {
             self.current.update(delta_time, clip.duration());
+        } else {
+            if !self.crossfade.is_some() && self.layers.is_empty() {
+                return;
+            }
         }
-
         match self.crossfade {
             Some(ref mut crossfade) => {
                 if let Some(current_clip) = clip {
                     self.pose.sample(asset, current_clip, self.current.time);
                 } else {
-                    log::warn!("2. Base Clip missing: {:?}", self.current.id);
                     self.pose.sample_rest(asset);
                 }
 
@@ -128,7 +138,6 @@ impl Animation {
                     crossfade.update(delta_time, target_clip.duration());
                     self.next_pose.sample(asset, target_clip, crossfade.to.time);
                 } else {
-                    log::warn!("1. Base Clip missing: {:?}", self.current.id);
                     crossfade.update(delta_time, 0.0);
                     self.next_pose.sample_rest(asset);
                 }
@@ -143,14 +152,13 @@ impl Animation {
                 if let Some(clip) = clip {
                     self.pose.sample(asset, clip, self.current.time);
                 } else {
-                    log::warn!("3. Base Clip missing: {:?}", self.current.id);
                     self.pose.sample_rest(asset);
                 }
             }
         }
 
         // Update Layers and Remove finished
-        self.layers.inner.retain_mut(|layer| {
+        self.layers.retain_mut(|layer| {
             let Some(clip) = asset.animations.get(layer.playback.id) else {
                 return false;
             };
@@ -166,30 +174,6 @@ impl Animation {
         for (skin, skin_pose) in asset.skins.iter().zip(&mut self.skin_poses) {
             skin_pose.update(skin, &self.pose);
         }
-    }
-}
-
-#[derive(Debug)]
-struct Layers {
-    inner: Vec<Layer>,
-}
-impl Layers {
-    fn new() -> Self {
-        Self {
-            inner: Vec::with_capacity(4),
-        }
-    }
-
-    #[inline(always)]
-    fn add(&mut self, id: AnimationId, weight: f32, looping: bool) {
-        if let Some(layer) = self.inner.iter_mut().find(|layer| layer.playback.id == id) {
-            layer.playback.time = 0.0;
-            layer.playback.looping = looping;
-            layer.weight = weight;
-            return;
-        }
-
-        self.inner.push(Layer::new(id, weight, looping));
     }
 }
 
