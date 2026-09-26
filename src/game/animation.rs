@@ -34,14 +34,12 @@ pub struct Animation {
     pub skin_poses: Vec<SkinPose>,
     pub pose: Pose,
     scratch_pose: Pose,
-    layers: Vec<Layer>,
+    layers: Layers,
 }
 impl Animation {
     pub fn new(asset: &Asset) -> Self {
-        let mut layers = Vec::with_capacity(4);
-        layers.push(Layer::new(AnimationId::Idle, 1.0, true));
         Self {
-            layers,
+            layers: Layers::new(),
             skin_poses: asset.skins.iter().map(SkinPose::new).collect(),
             pose: Pose::new(asset),
             scratch_pose: Pose::new(asset),
@@ -50,46 +48,43 @@ impl Animation {
 
     #[inline(always)]
     pub fn play(&mut self, id: AnimationId) {
-        if self.layers[0].id == id {
+        if self.layers.base.id == id {
             return;
         }
-        self.layers[0] = Layer::new(id, 1.0, false);
+        self.layers.base = Layer::new(id, 1.0, false);
     }
 
     #[inline(always)]
-    pub fn add_layer(&mut self, id: AnimationId, looping: bool, weight: f32) {
-        if let Some(layer) = self.layers.iter_mut().find(|layer| layer.id == id) {
-            layer.time = 0.0;
-            layer.looping = looping;
-            layer.weight = weight;
-            return;
-        }
-
-        self.layers.push(Layer::new(id, weight, looping));
+    pub fn add_layer(&mut self, id: AnimationId, weight: f32, looping: bool) {
+        self.layers.add(id, weight, looping)
     }
 
     #[inline(always)]
     pub fn play_loop(&mut self, id: AnimationId) {
-        if self.layers[0].id == id {
+        if self.layers.base.id == id {
             return;
         }
-        self.layers[0] = Layer::new(id, 1.0, true);
+        self.layers.base = Layer::new(id, 1.0, true);
     }
 
     #[inline(always)]
     pub fn is_playing(&self, id: AnimationId) -> bool {
+        if self.layers.base.id == id {
+            return true;
+        }
         self.layers.iter().any(|layer| layer.id == id)
     }
 
     pub fn update(&mut self, delta_time: f32, asset: &Asset) {
-        for layer in &mut self.layers {
+        for layer in self.layers.iter_mut() {
             if let Some(clip) = asset.animations.get(layer.id) {
                 layer.update(delta_time, clip);
             };
         }
 
-        let base = &mut self.layers[0];
+        let base = &mut self.layers.base;
         if let Some(clip) = asset.animations.get(base.id) {
+            base.update(delta_time, clip);
             self.pose.sample(asset, clip, base.time);
         } else if base.needs_reset {
             log::warn!("Base Clip not found {:?}", base.id);
@@ -97,7 +92,7 @@ impl Animation {
             base.needs_reset = false;
         };
 
-        for layer in self.layers.iter().skip(1) {
+        for layer in self.layers.iter() {
             if let Some(clip) = asset.animations.get(layer.id) {
                 self.scratch_pose.sample(asset, clip, layer.time);
                 self.pose.blend_into(&self.scratch_pose, layer.weight);
@@ -109,6 +104,40 @@ impl Animation {
         for (skin, skin_pose) in asset.skins.iter().zip(&mut self.skin_poses) {
             skin_pose.update(skin, &self.pose);
         }
+    }
+}
+
+#[derive(Debug)]
+struct Layers {
+    base: Layer,
+    inner: Vec<Layer>,
+}
+impl Layers {
+    fn new() -> Self {
+        let base = Layer::new(AnimationId::Idle, 1.0, true);
+        Self {
+            base,
+            inner: Vec::with_capacity(4),
+        }
+    }
+    fn iter(&self) -> impl Iterator<Item = &Layer> {
+        self.inner.iter()
+    }
+
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Layer> {
+        self.inner.iter_mut()
+    }
+
+    #[inline(always)]
+    fn add(&mut self, id: AnimationId, weight: f32, looping: bool) {
+        if let Some(layer) = self.inner.iter_mut().find(|layer| layer.id == id) {
+            layer.time = 0.0;
+            layer.looping = looping;
+            layer.weight = weight;
+            return;
+        }
+
+        self.inner.push(Layer::new(id, weight, looping));
     }
 }
 
@@ -131,6 +160,11 @@ impl Layer {
             looping,
             needs_reset: true,
         }
+    }
+
+    #[inline(always)]
+    fn finished(&self, clip: &AnimationClip) -> bool {
+        !self.looping && self.time > clip.duration()
     }
 
     fn update(&mut self, delta_time: f32, clip: &AnimationClip) {

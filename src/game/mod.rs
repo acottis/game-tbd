@@ -323,7 +323,7 @@ impl Game {
             player.jump(8.0);
         }
         if self.input.is_pressed(KeyCode::Digit0) {
-            player.animation.add_layer(AnimationId::Wave, true, 0.5);
+            player.animation.add_layer(AnimationId::Wave, 0.5, true);
         }
         if self.input.is_pressed(KeyCode::Digit9) {
             player.toggle_helmet();
@@ -359,12 +359,14 @@ impl Game {
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
-            if entity.velocity == Vec3::ZERO && entity.animation.is_playing(AnimationId::Walk) {
-                entity.animation.play_loop(AnimationId::Idle);
-            }
-            if entity.velocity != Vec3::ZERO {
+            if entity.velocity == Vec3::ZERO {
+                if entity.animation.is_playing(AnimationId::Walk) {
+                    entity.animation.play_loop(AnimationId::Idle);
+                }
+            } else {
                 entity.animation.play_loop(AnimationId::Walk);
             }
+
             let asset = assets.get(entity.model);
             entity.animation.update(delta_time, asset);
             entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
