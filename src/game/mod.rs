@@ -169,6 +169,26 @@ impl Entity {
     fn toggle_helmet(&mut self) {
         self.visible_render_nodes[4] = !self.visible_render_nodes[4];
     }
+
+    fn toggle_walk(&mut self) {
+        if self.speed == 4.0 {
+            self.speed = 2.0
+        } else {
+            self.speed = 4.0
+        }
+    }
+
+    fn animate(&mut self) {
+        let movement_speed = self.velocity.length();
+
+        if movement_speed < 0.01 {
+            self.animation.crossfade_loop(AnimationId::Idle, 0.3, 1.0);
+        } else {
+            self.animation.crossfade_loop(AnimationId::Walk, 0.6, 1.0);
+        }
+
+        self.animation.set_speed(movement_speed / self.speed);
+    }
 }
 
 pub struct Terrain {
@@ -317,10 +337,15 @@ impl Game {
             player.jump(8.0);
         }
         if self.input.is_pressed(KeyCode::Digit0) {
-            player.animation.add_layer(AnimationId::Wave, 0.75, false);
+            player
+                .animation
+                .add_layer(AnimationId::Wave, 0.75, 1.0, false);
         }
         if self.input.is_pressed(KeyCode::Digit9) {
             player.toggle_helmet();
+        }
+        if self.input.is_pressed(KeyCode::Digit8) {
+            player.toggle_walk();
         }
         if self.input.is_held(KeyCode::KeyU) {
             camera.rotate_pitch(delta_time * PI / 2.0)
@@ -353,13 +378,8 @@ impl Game {
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
-            if entity.velocity == Vec3::ZERO {
-                entity.animation.crossfade_loop(AnimationId::Idle, 0.3);
-            } else {
-                entity.animation.crossfade_loop(AnimationId::Walk, 0.6);
-            }
-
             let asset = assets.get(entity.model);
+            entity.animate();
             entity.animation.update(delta_time, asset);
             entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
         }

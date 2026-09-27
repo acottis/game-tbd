@@ -34,21 +34,23 @@ impl TryFrom<&str> for AnimationId {
 struct Playback {
     id: AnimationId,
     looping: bool,
+    speed: f32,
     time: f32,
 }
 
 impl Playback {
-    fn new(id: AnimationId, looping: bool) -> Self {
+    fn new(id: AnimationId, looping: bool, speed: f32) -> Self {
         Self {
             id,
             time: 0.0,
             looping,
+            speed,
         }
     }
 
     #[inline(always)]
     fn update(&mut self, delta_time: f32, duration: f32) {
-        self.time += delta_time;
+        self.time += delta_time * self.speed;
 
         if self.looping && duration > 0.0 && self.time >= duration {
             self.time %= duration;
@@ -76,23 +78,24 @@ impl Animation {
             skin_poses: asset.skins.iter().map(SkinPose::new).collect(),
             pose: Pose::new(asset),
             next_pose: Pose::new(asset),
-            current: Playback::new(AnimationId::Idle, true),
+            current: Playback::new(AnimationId::Idle, true, 1.0),
             crossfade: None,
         }
     }
 
     #[inline(always)]
-    pub fn add_layer(&mut self, id: AnimationId, weight: f32, looping: bool) {
+    pub fn add_layer(&mut self, id: AnimationId, weight: f32, speed: f32, looping: bool) {
         if let Some(layer) = self.layers.iter_mut().find(|layer| layer.playback.id == id) {
             layer.playback.time = 0.0;
             layer.playback.looping = looping;
+            layer.playback.speed = speed;
             layer.weight = weight;
         } else {
-            self.layers.push(Layer::new(id, weight, looping));
+            self.layers.push(Layer::new(id, weight, speed, looping));
         }
     }
 
-    pub fn crossfade_loop(&mut self, id: AnimationId, duration: f32) {
+    pub fn crossfade_loop(&mut self, id: AnimationId, duration: f32, speed: f32) {
         // Ignore requests to crossfade to the current animation being played
         if self.current.id == id {
             return;
@@ -106,7 +109,7 @@ impl Animation {
         }
 
         self.crossfade = Some(Crossfade {
-            to: Playback::new(id, true),
+            to: Playback::new(id, true, speed),
             duration,
             elapsed: 0.0,
         });
@@ -175,6 +178,15 @@ impl Animation {
             skin_pose.update(skin, &self.pose);
         }
     }
+
+    #[inline(always)]
+    pub fn set_speed(&mut self, speed: f32) {
+        self.current.speed = speed.max(0.0);
+
+        if let Some(crossfade) = &mut self.crossfade {
+            crossfade.to.speed = speed.max(0.0);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -214,9 +226,9 @@ struct Layer {
 
 impl Layer {
     #[inline(always)]
-    fn new(id: AnimationId, weight: f32, looping: bool) -> Self {
+    fn new(id: AnimationId, weight: f32, speed: f32, looping: bool) -> Self {
         Self {
-            playback: Playback::new(id, looping),
+            playback: Playback::new(id, looping, speed),
             weight,
         }
     }
