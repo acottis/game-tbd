@@ -179,6 +179,7 @@ impl Entity {
     }
 
     fn animate(&mut self) {
+        // TODO: Make a locomotive speed
         let movement_speed = self.velocity.length();
 
         if movement_speed < 0.01 {
@@ -187,7 +188,7 @@ impl Entity {
             self.animation.crossfade_loop(AnimationId::Walk, 0.6, 1.0);
         }
 
-        self.animation.set_speed(movement_speed / self.speed);
+        // self.animation.set_speed(movement_speed / self.speed);
     }
 }
 

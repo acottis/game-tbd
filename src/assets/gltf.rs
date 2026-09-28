@@ -2,7 +2,7 @@ use std::path::Path;
 
 use glam::{Mat4, Quat, Vec3};
 use gltf::animation::util::ReadOutputs;
-use gltf::{Document, buffer::Data, image::Source, texture::Info};
+use gltf::{buffer::Data, image::Source, texture::Info, Document};
 use image::{DynamicImage, ImageFormat};
 
 use crate::assets::{Asset, MaterialId, MeshId, Node, NodeId, RenderNode};
