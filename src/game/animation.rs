@@ -118,47 +118,38 @@ impl Animation {
     // TOOD: War crime perf with sample_rest not being cached
     // many copies for fun on slightly happier paths but I
     // dont see what I can do about it.
-    pub fn update(&mut self, delta_time: f32, asset: &Asset) {
-        let clip = asset.animations.get(self.current.id);
-
-        // TODO: Is this good? Early exit
-        if let Some(clip) = clip {
+    fn update_current(&mut self, delta_time: f32, asset: &Asset) {
+        if let Some(clip) = asset.animations.get(self.current.id) {
             self.current.update(delta_time, clip.duration());
+            self.pose.sample(asset, clip, self.current.time);
         } else {
-            if !self.crossfade.is_some() && self.layers.is_empty() {
+            // Short cicuit when there is no clips's to sample
+            if self.crossfade.is_none() && self.layers.is_empty() {
                 return;
             }
+            self.pose.sample_rest(asset);
         }
-        match self.crossfade {
-            Some(ref mut crossfade) => {
-                if let Some(current_clip) = clip {
-                    self.pose.sample(asset, current_clip, self.current.time);
-                } else {
-                    self.pose.sample_rest(asset);
-                }
 
-                if let Some(target_clip) = asset.animations.get(crossfade.to.id) {
-                    crossfade.update(delta_time, target_clip.duration());
-                    self.next_pose.sample(asset, target_clip, crossfade.to.time);
-                } else {
-                    crossfade.update(delta_time, 0.0);
-                    self.next_pose.sample_rest(asset);
-                }
-
-                self.pose.blend(&self.next_pose, crossfade.weight());
-                if crossfade.finished() {
-                    self.current = crossfade.to;
-                    self.crossfade = None;
-                }
+        if let Some(ref mut crossfade) = self.crossfade {
+            if let Some(target_clip) = asset.animations.get(crossfade.to.id) {
+                crossfade.update(delta_time, target_clip.duration());
+                self.next_pose.sample(asset, target_clip, crossfade.to.time);
+            } else {
+                crossfade.update(delta_time, 0.0);
+                self.next_pose.sample_rest(asset);
             }
-            None => {
-                if let Some(clip) = clip {
-                    self.pose.sample(asset, clip, self.current.time);
-                } else {
-                    self.pose.sample_rest(asset);
-                }
+
+            self.pose.blend(&self.next_pose, crossfade.weight());
+
+            if crossfade.finished() {
+                self.current = crossfade.to;
+                self.crossfade = None;
             }
         }
+    }
+
+    pub fn update(&mut self, delta_time: f32, asset: &Asset) {
+        self.update_current(delta_time, asset);
 
         // Update Layers and Remove finished
         self.layers.retain_mut(|layer| {

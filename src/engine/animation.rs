@@ -146,6 +146,7 @@ impl AnimationClip {
     pub fn new(nodes: Vec<Option<NodeAnimation>>, duration: f32) -> Self {
         Self { nodes, duration }
     }
+    #[inline(always)]
     pub fn duration(&self) -> f32 {
         self.duration
     }
