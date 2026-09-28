@@ -166,10 +166,12 @@ impl Entity {
             .filter_map(|(node, visible)| visible.then_some(node))
     }
 
+    // TODO: Hard coded
     fn toggle_helmet(&mut self) {
         self.visible_render_nodes[4] = !self.visible_render_nodes[4];
     }
 
+    // TODO: ????
     fn toggle_walk(&mut self) {
         if self.speed == 4.0 {
             self.speed = 2.0
@@ -178,7 +180,7 @@ impl Entity {
         }
     }
 
-    fn animate(&mut self) {
+    fn animate(&mut self, delta_time: f32, asset: &Asset) {
         // TODO: Make a locomotive speed
         let movement_speed = self.velocity.length();
 
@@ -189,6 +191,7 @@ impl Entity {
         }
 
         // self.animation.set_speed(movement_speed / self.speed);
+        self.animation.update(delta_time, asset);
     }
 }
 
@@ -379,10 +382,10 @@ impl Game {
             .set_text(format!("FPS: {:.0}", 1.0 / delta_time));
 
         for entity in &mut self.entities {
-            let asset = assets.get(entity.model);
-            entity.animate();
-            entity.animation.update(delta_time, asset);
             entity.move_and_collide(delta_time, &self.terrain.collider, &self.objects);
+
+            let asset = assets.get(entity.model);
+            entity.animate(delta_time, asset);
         }
 
         should_exit
