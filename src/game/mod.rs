@@ -184,13 +184,15 @@ impl Entity {
         // TODO: Make a locomotive speed
         let movement_speed = self.velocity.length();
 
-        if movement_speed < 0.01 {
+        let idle = movement_speed < 0.001;
+
+        if idle {
             self.animation.crossfade_loop(AnimationId::Idle, 0.3, 1.0);
         } else {
             self.animation.crossfade_loop(AnimationId::Walk, 0.6, 1.0);
+            self.animation.set_speed(movement_speed / self.speed);
         }
 
-        // self.animation.set_speed(movement_speed / self.speed);
         self.animation.update(delta_time, asset);
     }
 }
